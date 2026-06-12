@@ -16,43 +16,44 @@ class HistoricoTab:
         self.f_titulo = f_titulo
         self.master_app = master_app
 
-        # Configura o fundo cinza claro para destacar os blocos brancos
+        # Configura o fundo cinza claro idêntico ao ecrã de impressoras
         self.parent.configure(fg_color="#f0f2f5")
 
         self.construir_layout()
         self.atualizar_tabela()
 
     def construir_layout(self):
-        # 1. HEADER & FILTROS (No topo, integrados de forma limpa)
+        # 1. HEADER & FILTROS 
         frm_header = ctk.CTkFrame(self.parent, fg_color="transparent")
         frm_header.pack(fill="x", padx=20, pady=(20, 10))
         
         ctk.CTkLabel(frm_header, text="Dashboard de Produção", font=ctk.CTkFont(size=22, weight="bold"), text_color="#1f538d").pack(side="left")
         
-        # Bloco de filtros rápido à direita do título
+        # Container de filtros à direita com design limpo
         frm_flt = ctk.CTkFrame(frm_header, fg_color="transparent")
         frm_flt.pack(side="right")
         
-        ctk.CTkLabel(frm_flt, text="Projeto:", font=self.f_padrao, text_color="gray30").grid(row=0, column=0, padx=5)
-        self.flt_p = ctk.CTkEntry(frm_flt, width=120, font=self.f_padrao, fg_color="white", border_width=1, border_color="gray80")
+        ctk.CTkLabel(frm_flt, text="Projeto:", font=self.f_padrao, text_color="gray40").grid(row=0, column=0, padx=5)
+        self.flt_p = ctk.CTkEntry(frm_flt, width=130, font=self.f_padrao, fg_color="white", border_color="#e0e0e0", text_color="black")
         self.flt_p.grid(row=0, column=1, padx=5)
         self.flt_p.bind("<KeyRelease>", lambda e: self.atualizar_tabela())
 
-        ctk.CTkLabel(frm_flt, text="Material:", font=self.f_padrao, text_color="gray30").grid(row=0, column=2, padx=5)
-        self.flt_m = ctk.CTkEntry(frm_flt, width=120, font=self.f_padrao, fg_color="white", border_width=1, border_color="gray80")
+        ctk.CTkLabel(frm_flt, text="Material:", font=self.f_padrao, text_color="gray40").grid(row=0, column=2, padx=5)
+        self.flt_m = ctk.CTkEntry(frm_flt, width=130, font=self.f_padrao, fg_color="white", border_color="#e0e0e0", text_color="black")
         self.flt_m.grid(row=0, column=3, padx=5)
         self.flt_m.bind("<KeyRelease>", lambda e: self.atualizar_tabela())
 
-        # 2. CARDS DE KPI (Idênticos ao conceito do mockup do dashboard)
+
+    # 2. CARDS DE KPI (Com Ícones Modernos em Unicode e Cores Combinadas)
         frm_kpi = ctk.CTkFrame(self.parent, fg_color="transparent")
         frm_kpi.pack(fill="x", padx=20, pady=10)
         
-        self.lbl_kpi_total = self.criar_card_kpi(frm_kpi, "Produções Concluídas", "0", "#1f538d")
-        self.lbl_kpi_taxa = self.criar_card_kpi(frm_kpi, "Taxa de Sucesso", "0.0%", "#28a745")
-        self.lbl_kpi_horas = self.criar_card_kpi(frm_kpi, "Total de Horas", "00:00", "#e0a800")
+        self.lbl_kpi_total = self.criar_card_kpi(frm_kpi, "📦 Produções Concluídas", "0", "#1f538d")
+        self.lbl_kpi_taxa = self.criar_card_kpi(frm_kpi, "🎯 Taxa de Sucesso", "0.0%", "#28a745")
+        self.lbl_kpi_horas = self.criar_card_kpi(frm_kpi, "⏱️ Total de Horas", "00:00", "#e0a800")
 
-        # 3. CONTAINER DA TABELA (Bloco Branco com cantos arredondados)
-        frm_conteudo = ctk.CTkFrame(self.parent, fg_color="white", corner_radius=10)
+        # 3. CONTAINER DA TABELA (Bloco Branco Estilo Card Único)
+        frm_conteudo = ctk.CTkFrame(self.parent, fg_color="white", corner_radius=12, border_width=1, border_color="#e0e0e0")
         frm_conteudo.pack(fill="both", expand=True, padx=20, pady=10)
 
         cols = ("id", "data", "projeto", "maquina", "material", "qnt", "tempo", "estado")
@@ -60,36 +61,41 @@ class HistoricoTab:
         for c in cols: 
             self.tab_tree.heading(c, text=c.upper())
         
+        # Distribuição profissional de larguras
         self.tab_tree.column("id", width=50, anchor="center")
         self.tab_tree.column("data", width=100, anchor="center")
+        self.tab_tree.column("projeto", width=150, anchor="w")
         self.tab_tree.column("maquina", width=90, anchor="center")
-        self.tab_tree.column("qnt", width=70, anchor="center")
+        self.tab_tree.column("material", width=140, anchor="w")
+        self.tab_tree.column("qnt", width=80, anchor="center")
         self.tab_tree.column("tempo", width=80, anchor="center")
         self.tab_tree.column("estado", width=120, anchor="center")
 
         self.tab_tree.bind("<Double-1>", self.abrir_tratamento_ordem)
 
+        # Scrollbar elegante integrada na margem do card
         sb = ttk.Scrollbar(frm_conteudo, orient="vertical", command=self.tab_tree.yview)
         self.tab_tree.configure(yscrollcommand=sb.set)
-        sb.pack(fill="y", side="right", pady=10, padx=(0, 10))
+        sb.pack(fill="y", side="right", pady=10, padx=(0, 5))
         self.tab_tree.pack(fill="both", expand=True, side="left", padx=10, pady=10)
 
-        # 4. BARRA DE ACÇÕES INFERIOR
+        # 4. BARRA DE AÇÕES INFERIOR MODERNA
         frm_acoes = ctk.CTkFrame(self.parent, fg_color="transparent")
-        frm_acoes.pack(fill="x", padx=20, pady=(5, 15))
+        frm_acoes.pack(fill="x", padx=20, pady=(5, 20))
         
-        ctk.CTkButton(frm_acoes, text="Clonar Ordem", fg_color="#EAA115", text_color="black", font=self.f_padrao, command=self.clonar_log).pack(side="left", padx=5)
-        ctk.CTkButton(frm_acoes, text="Exportar Dados (CSV)", fg_color="#28a745", text_color="white", font=self.f_padrao, command=self.exportar_csv).pack(side="left", padx=5)
-        ctk.CTkButton(frm_acoes, text="Apagar Registo", fg_color="#A12222", text_color="white", font=self.f_padrao, command=self.remover_log).pack(side="right", padx=5)
+        ctk.CTkButton(frm_acoes, text="Clonar Ordem", fg_color="#e8f0fe", text_color="#1f538d", hover_color="#d2e3fc", height=35, font=self.f_padrao, command=self.clonar_log).pack(side="left", padx=5)
+        ctk.CTkButton(frm_acoes, text="Exportar Dados (CSV)", fg_color="#1f538d", text_color="white", hover_color="#143a63", height=35, font=self.f_padrao, command=self.exportar_csv).pack(side="left", padx=5)
+        ctk.CTkButton(frm_acoes, text="Apagar Registo", fg_color="#fbe9e7", text_color="#dc3545", hover_color="#ffcdd2", height=35, font=self.f_padrao, command=self.remover_log).pack(side="right", padx=5)
 
         self.configurar_estilo_tabela()
 
     def criar_card_kpi(self, parent, titulo, valor, cor_destaque):
-        card = ctk.CTkFrame(parent, fg_color="white", corner_radius=10, height=100)
+        card = ctk.CTkFrame(parent, fg_color="white", corner_radius=12, border_width=1, border_color="#e0e0e0", height=100)
         card.pack(side="left", fill="x", expand=True, padx=5)
         card.pack_propagate(False)
         
-        ctk.CTkLabel(card, text=titulo, text_color="gray50", font=self.f_padrao).pack(anchor="w", padx=15, pady=(15, 0))
+        # Alterado text_color para "gray20" para dar mais leitura ao ícone e ao título
+        ctk.CTkLabel(card, text=titulo, text_color="gray20", font=ctk.CTkFont(family="Arial", size=13, weight="bold")).pack(anchor="w", padx=15, pady=(15, 0))
         lbl_valor = ctk.CTkLabel(card, text=valor, text_color=cor_destaque, font=ctk.CTkFont(size=28, weight="bold"))
         lbl_valor.pack(anchor="w", padx=15, pady=5)
         return lbl_valor
@@ -97,8 +103,9 @@ class HistoricoTab:
     def configurar_estilo_tabela(self):
         style = ttk.Style()
         style.theme_use("default")
-        style.configure("Dashboard.Treeview", background="white", foreground="black", rowheight=28, fieldbackground="white", borderwidth=0)
-        style.configure("Dashboard.Treeview.Heading", background="#f0f2f5", foreground="gray30", font=("Arial", 10, "bold"), borderwidth=0)
+        # Customização fina para matar o visual cru do Windows
+        style.configure("Dashboard.Treeview", background="white", foreground="#2d3748", font=("Arial", 11), rowheight=32, fieldbackground="white", borderwidth=0)
+        style.configure("Dashboard.Treeview.Heading", background="#f8f9fa", foreground="gray40", font=("Arial", 10, "bold"), borderwidth=0, rowheight=35)
         style.map("Dashboard.Treeview", background=[("selected", "#1f538d")], foreground=[("selected", "white")])
 
     def atualizar_tabela(self):
@@ -131,10 +138,10 @@ class HistoricoTab:
                     sucesso_pecas += 1
                 total_horas += ProducaoService.converter_para_horas(l.get("hora_maquina", "00:00"))
 
-        # Atualização em tempo real dos Cards do Dashboard
         taxa = (sucesso_pecas / total_pecas * 100) if total_pecas > 0 else 0.0
         
-        self.lbl_kpi_total.configure(text=str(total_pecas))
+        # Injeção correta nos novos cards baseados na tua análise
+        self.lbl_kpi_total.configure(text=str(sucesso_pecas))
         self.lbl_kpi_taxa.configure(text=f"{taxa:.1f}%")
         self.lbl_kpi_horas.configure(text=ProducaoService.converter_para_string(total_horas))
 

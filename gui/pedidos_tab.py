@@ -25,14 +25,13 @@ class PedidosTab:
         ctk.CTkLabel(frm_header, text="Gestão de Pedidos", font=ctk.CTkFont(size=22, weight="bold"), text_color="#1f538d").pack(side="left")
         ctk.CTkButton(frm_header, text="+ Novo Pedido", fg_color="#28a745", text_color="white", font=self.f_padrao, command=self.abrir_novo_pedido).pack(side="right")
 
-        # 2. CARDS DE KPI (Estilo "Dashboard")
+        # 2. CARDS DE KPI (Adicionados ícones focados em fluxo de pedidos)
         frm_kpi = ctk.CTkFrame(self.parent, fg_color="transparent")
         frm_kpi.pack(fill="x", padx=20, pady=10)
         
-        # Criação de 3 cartões brancos
-        self.lbl_kpi_total = self.criar_card_kpi(frm_kpi, "Total de Pedidos", "0", 0)
-        self.lbl_kpi_andamento = self.criar_card_kpi(frm_kpi, "Em Andamento", "0", 1)
-        self.lbl_kpi_entregues = self.criar_card_kpi(frm_kpi, "Entregues", "0", 2)
+        self.lbl_kpi_total = self.criar_card_kpi(frm_kpi, "📋 Total de Pedidos", "0", 0)
+        self.lbl_kpi_andamento = self.criar_card_kpi(frm_kpi, "⏳ Em Andamento", "0", 1)
+        self.lbl_kpi_entregues = self.criar_card_kpi(frm_kpi, "✅ Entregues", "0", 2)
 
         # 3. ÁREA DA TABELA (Container Branco)
         frm_lista = ctk.CTkFrame(self.parent, fg_color="white", corner_radius=10)
@@ -68,7 +67,7 @@ class PedidosTab:
         card.pack(side="left", fill="x", expand=True, padx=5)
         card.pack_propagate(False) # Mantém a altura fixa
         
-        ctk.CTkLabel(card, text=titulo, text_color="gray50", font=self.f_padrao).pack(anchor="w", padx=15, pady=(15, 0))
+        ctk.CTkLabel(card, text=titulo, text_color="gray20", font=ctk.CTkFont(family="Arial", size=13, weight="bold")).pack(anchor="w", padx=15, pady=(15, 0))
         lbl_valor = ctk.CTkLabel(card, text=valor, text_color="#1f538d", font=ctk.CTkFont(size=32, weight="bold"))
         lbl_valor.pack(anchor="w", padx=15, pady=5)
         return lbl_valor
