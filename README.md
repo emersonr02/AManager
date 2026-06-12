@@ -1,18 +1,5 @@
 # AManager
 
-Excelente iniciativa. Ter a documentação em dia é o que separa um script amador de um software de engenharia profissional. Isso será excelente não só para a manutenção interna no laboratório, mas também para o teu portfólio.
-
-Como combinámos, preparei a documentação em inglês. Destaquei propositadamente a transição para a arquitetura modular e a solução de concorrência (file locking), pois são os pontos técnicos mais fortes do teu trabalho.
-
-Aqui tens a descrição curta (para colocar na secção "About" do GitHub ou no currículo) e o ficheiro README.md completo.
-
-Short Description (Para o GitHub "About" ou CV)
-MES i3D System is a lightweight, local Manufacturing Execution System (MES) developed in Python for managing 3D printing farms. It features a modular MVC-inspired architecture, concurrent JSON data handling with file locking, and a CustomTkinter GUI. Built to track production orders, manage machine uptime (FDM, SLA, SLS), and generate analytical CSV reports for engineering teams.
-
-README.md
-Markdown
-# MES i3D System | Manufacturing Execution System
-
 A robust, local Manufacturing Execution System (MES) designed specifically for Additive Manufacturing (AM) laboratories and 3D printing farms. 
 
 This tool was developed to replace manual spreadsheets and decentralized tracking, providing a unified dashboard to manage print orders, track machine park status, and log production metrics across different technologies (FDM, SLA, and SLS).
