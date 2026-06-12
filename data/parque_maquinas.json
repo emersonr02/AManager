@@ -4,104 +4,119 @@
     "nome": "Bambu Lab X1C #1",
     "tech": "FDM",
     "estado": "Operacional",
-    "manutencao": "OK"
+    "manutencao": "OK",
+    "url_img": "https://portal.bblmw.com/x1/x1Series-main-bg-v1-sm.png"
   },
   {
     "id": "X1C-2",
     "nome": "Bambu Lab X1C #2",
     "tech": "FDM",
     "estado": "Operacional",
-    "manutencao": "OK"
+    "manutencao": "OK",
+    "url_img": "https://portal.bblmw.com/x1/x1Series-main-bg-v1-sm.png"
   },
   {
     "id": "X1C-3",
     "nome": "Bambu Lab X1C #3",
     "tech": "FDM",
     "estado": "Operacional",
-    "manutencao": "OK"
+    "manutencao": "OK",
+    "url_img": "https://portal.bblmw.com/x1/x1Series-main-bg-v1-sm.png"
   },
   {
     "id": "P1S-1",
     "nome": "Bambu Lab P1S #1",
     "tech": "FDM",
     "estado": "Operacional",
-    "manutencao": "OK"
+    "manutencao": "OK",
+    "url_img": "https://dynamism.com/media/catalog/brand/bambu-lab-p1s-upd.png"
   },
   {
     "id": "P1S-2",
     "nome": "Bambu Lab P1S #2",
     "tech": "FDM",
     "estado": "Operacional",
-    "manutencao": "OK"
+    "manutencao": "OK",
+    "url_img": "https://dynamism.com/media/catalog/brand/bambu-lab-p1s-upd.png"
   },
   {
     "id": "EnderS1-1",
     "nome": "Ender S1 Pro #1",
     "tech": "FDM",
     "estado": "Operacional",
-    "manutencao": "OK"
+    "manutencao": "OK",
+    "url_img": "https://mm.digikey.com/Volume0/opasdata/d220001/medias/images/4348/MFG_Enders-3-S1-Pro.jpg?hidebanner=true"
   },
   {
     "id": "EnderS1-2",
     "nome": "Ender S1 Pro #2",
     "tech": "FDM",
     "estado": "Operacional",
-    "manutencao": "OK"
+    "manutencao": "OK",
+    "url_img": "https://mm.digikey.com/Volume0/opasdata/d220001/medias/images/4348/MFG_Enders-3-S1-Pro.jpg?hidebanner=true"
   },
   {
     "id": "EnderS1-3",
     "nome": "Ender S1 Pro #3",
     "tech": "FDM",
     "estado": "Operacional",
-    "manutencao": "OK"
+    "manutencao": "OK",
+    "url_img": "https://mm.digikey.com/Volume0/opasdata/d220001/medias/images/4348/MFG_Enders-3-S1-Pro.jpg?hidebanner=true"
   },
   {
     "id": "EnderS1-4",
     "nome": "Ender S1 Pro #4",
     "tech": "FDM",
     "estado": "Manutenção - Parado",
-    "manutencao": "Troca de nozzle"
+    "manutencao": "Troca de nozzle",
+    "url_img": "https://mm.digikey.com/Volume0/opasdata/d220001/medias/images/4348/MFG_Enders-3-S1-Pro.jpg?hidebanner=true"
   },
   {
     "id": "EnderS1-5",
     "nome": "Ender S1 Pro #5",
     "tech": "FDM",
     "estado": "Operacional",
-    "manutencao": "OK"
+    "manutencao": "OK",
+    "url_img": "https://mm.digikey.com/Volume0/opasdata/d220001/medias/images/4348/MFG_Enders-3-S1-Pro.jpg?hidebanner=true"
   },
   {
     "id": "EnderS1-6",
     "nome": "Ender S1 Pro #6",
     "tech": "FDM",
     "estado": "Operacional",
-    "manutencao": "OK"
+    "manutencao": "OK",
+    "url_img": "https://mm.digikey.com/Volume0/opasdata/d220001/medias/images/4348/MFG_Enders-3-S1-Pro.jpg?hidebanner=true"
   },
   {
     "id": "RatRig-1",
     "nome": "RatRig V-Core",
     "tech": "FDM",
     "estado": "Manutenção - Parado",
-    "manutencao": "Troca de nozzle"
+    "manutencao": "Troca de nozzle",
+    "url_img": "https://3ddruckboss.de/cdn/shop/files/v-chonk-render-1-1_e7c8fa41-9e3c-4d63-a78d-677433849651.webp?v=1735563163&width=600"
   },
   {
     "id": "SLS-380",
     "nome": "3D Systems SLS 380",
     "tech": "SLS",
     "estado": "Operacional",
-    "manutencao": "OK"
+    "manutencao": "OK",
+    "url_img": "https://cdg.uk.com/wp-content/uploads/2017/11/2755-ProX-500.jpg"
   },
   {
     "id": "Form3L",
     "nome": "Formlabs Form 3L",
     "tech": "SLA",
     "estado": "Operacional",
-    "manutencao": "OK"
+    "manutencao": "OK",
+    "url_img": "https://formlabs.com/checkout-media/catalog/product/600x600/f/o/form_3l_1_base_1_5.png"
   },
   {
     "id": "HalotSky",
     "nome": "Creality Halot Sky",
     "tech": "SLA",
     "estado": "Operacional",
-    "manutencao": "OK"
+    "manutencao": "OK",
+    "url_img": "https://goindustrial.com/cdn/shop/products/CL-89New_1200x1200_81af36b8-d8e9-433a-88dd-29d48e6f41f1.jpg?v=1692059985"
   }
 ]

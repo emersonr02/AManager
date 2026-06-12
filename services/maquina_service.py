@@ -15,8 +15,7 @@ class MaquinaService:
         return [m["id"] for m in maquinas if m.get("tech") == tecnologia and m.get("estado") == "Operacional"]
 
     @staticmethod
-    def salvar_maquina(mid: str, nome: str, tech: str, estado: str, manutencao: str):
-        """Atualiza a máquina se o ID já existir, ou cria uma nova se for ID inédito."""
+    def salvar_maquina(mid: str, nome: str, tech: str, estado: str, manutencao: str, url_img: str = ""):
         maquinas = JSONManager.carregar(ARQUIVO_MAQUINAS)
         existe = False
         
@@ -26,10 +25,23 @@ class MaquinaService:
                     "nome": nome, 
                     "tech": tech, 
                     "estado": estado, 
-                    "manutencao": manutencao
+                    "manutencao": manutencao,
+                    "url_img": url_img # Atualiza
                 })
                 existe = True
                 break
+                
+        if not existe:
+            maquinas.append({
+                "id": mid, 
+                "nome": nome, 
+                "tech": tech, 
+                "estado": estado, 
+                "manutencao": manutencao,
+                "url_img": url_img # Cria novo
+            })
+            
+        JSONManager.salvar(maquinas, ARQUIVO_MAQUINAS)
                 
         if not existe:
             maquinas.append({
