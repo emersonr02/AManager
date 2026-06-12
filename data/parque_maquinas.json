@@ -1,0 +1,107 @@
+[
+  {
+    "id": "X1C-1",
+    "nome": "Bambu Lab X1C #1",
+    "tech": "FDM",
+    "estado": "Operacional",
+    "manutencao": "OK"
+  },
+  {
+    "id": "X1C-2",
+    "nome": "Bambu Lab X1C #2",
+    "tech": "FDM",
+    "estado": "Operacional",
+    "manutencao": "OK"
+  },
+  {
+    "id": "X1C-3",
+    "nome": "Bambu Lab X1C #3",
+    "tech": "FDM",
+    "estado": "Operacional",
+    "manutencao": "OK"
+  },
+  {
+    "id": "P1S-1",
+    "nome": "Bambu Lab P1S #1",
+    "tech": "FDM",
+    "estado": "Operacional",
+    "manutencao": "OK"
+  },
+  {
+    "id": "P1S-2",
+    "nome": "Bambu Lab P1S #2",
+    "tech": "FDM",
+    "estado": "Operacional",
+    "manutencao": "OK"
+  },
+  {
+    "id": "EnderS1-1",
+    "nome": "Ender S1 Pro #1",
+    "tech": "FDM",
+    "estado": "Operacional",
+    "manutencao": "OK"
+  },
+  {
+    "id": "EnderS1-2",
+    "nome": "Ender S1 Pro #2",
+    "tech": "FDM",
+    "estado": "Operacional",
+    "manutencao": "OK"
+  },
+  {
+    "id": "EnderS1-3",
+    "nome": "Ender S1 Pro #3",
+    "tech": "FDM",
+    "estado": "Operacional",
+    "manutencao": "OK"
+  },
+  {
+    "id": "EnderS1-4",
+    "nome": "Ender S1 Pro #4",
+    "tech": "FDM",
+    "estado": "Manutenção - Parado",
+    "manutencao": "Troca de nozzle"
+  },
+  {
+    "id": "EnderS1-5",
+    "nome": "Ender S1 Pro #5",
+    "tech": "FDM",
+    "estado": "Operacional",
+    "manutencao": "OK"
+  },
+  {
+    "id": "EnderS1-6",
+    "nome": "Ender S1 Pro #6",
+    "tech": "FDM",
+    "estado": "Operacional",
+    "manutencao": "OK"
+  },
+  {
+    "id": "RatRig-1",
+    "nome": "RatRig V-Core",
+    "tech": "FDM",
+    "estado": "Manutenção - Parado",
+    "manutencao": "Troca de nozzle"
+  },
+  {
+    "id": "SLS-380",
+    "nome": "3D Systems SLS 380",
+    "tech": "SLS",
+    "estado": "Operacional",
+    "manutencao": "OK"
+  },
+  {
+    "id": "Form3L",
+    "nome": "Formlabs Form 3L",
+    "tech": "SLA",
+    "estado": "Operacional",
+    "manutencao": "OK"
+  },
+  {
+    "id": "HalotSky",
+    "nome": "Creality Halot Sky",
+    "tech": "SLA",
+    "estado": "Operacional",
+    "manutencao": "OK"
+  }
+]

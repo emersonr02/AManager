@@ -1,0 +1,45 @@
+import re
+
+class ProducaoService:
+    
+    @staticmethod
+    def validar_formato_tempo(tempo_str: str) -> bool:
+        """Valida se a string está no formato exato HH:MM"""
+        return bool(re.match(r"^\d{2}:\d{2}$", tempo_str.strip()))
+
+    @staticmethod
+    def converter_para_horas(hhmm: str) -> float:
+        """Converte string 'HH:MM' para float (ex: '01:30' -> 1.5)"""
+        try:
+            partes = hhmm.split(':')
+            if len(partes) >= 2:
+                return int(partes[0]) + (int(partes[1]) / 60)
+            return 0.0
+        except ValueError:
+            return 0.0
+
+    @staticmethod
+    def converter_para_string(horas_float: float) -> str:
+        """Converte float para string 'HH:MM' (ex: 1.5 -> '01:30')"""
+        h = int(horas_float)
+        m = int(round((horas_float - h) * 60))
+        if m == 60:
+            h += 1
+            m = 0
+        return f"{h:02d}:{m:02d}"
+
+    @staticmethod
+    def calcular_consumo_sls(altura_mm: float, perc_po_novo: float, 
+                             largura_cuba: float = 381.0, 
+                             profundidade_cuba: float = 330.0, 
+                             densidade_po: float = 0.45) -> float:
+        """
+        Calcula o consumo de pó em kg.
+        Os parâmetros da máquina (largura, profundidade, densidade) agora têm 
+        valores por defeito, mas podem ser injetados dinamicamente no futuro.
+        """
+        volume_mm3 = largura_cuba * profundidade_cuba * altura_mm
+        peso_total_kg = (volume_mm3 / 1_000_000) * densidade_po
+        consumo_real_kg = peso_total_kg * perc_po_novo
+        
+        return round(consumo_real_kg, 4)
