@@ -43,3 +43,15 @@ class ProducaoService:
         consumo_real_kg = peso_total_kg * perc_po_novo
         
         return round(consumo_real_kg, 4)
+    
+    @staticmethod
+    def obter_ultimo_lote_sls():
+        from database.json_manager import JSONManager
+        from config.paths import ARQUIVO_LOGS
+        
+        logs = JSONManager.carregar(ARQUIVO_LOGS)
+        # Filtra apenas registos que tenham a chave "lote_po" preenchida, do mais recente para o mais antigo
+        for log in reversed(logs):
+            if log.get("lote_po"):
+                return log.get("lote_po")
+        return "" # Retorna vazio se for a primeira vez
