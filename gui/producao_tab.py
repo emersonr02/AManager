@@ -17,7 +17,7 @@ class ProducaoTab:
         self.f_titulo = f_titulo
         self.master_app = master_app 
         
-        self.parent.configure(fg_color="#f0f2f5") # Garante o fundo claro consistente
+        self.parent.configure(fg_color="#f0f2f5") 
         self.construir_layout()
         self.atualizar_combos()
 
@@ -31,8 +31,14 @@ class ProducaoTab:
         if len(widget.get()) > 5:
             widget.delete(5, tk.END)
 
+    def obter_usuario_windows(self):
+        """ Captura as credenciais do utilizador logado no sistema operativo """
+        try:
+            return os.getlogin()
+        except Exception:
+            return "Operador_Desconhecido"
+
     def construir_layout(self):
-        # Frame Principal com design de cartão branco
         frm = ctk.CTkFrame(self.parent, fg_color="white", corner_radius=12, border_width=1, border_color="#e0e0e0")
         frm.pack(fill="both", expand=True, padx=20, pady=20)
         frm.columnconfigure(1, weight=1)
@@ -85,47 +91,45 @@ class ProducaoTab:
         self.ent_perc = ctk.CTkEntry(frm, placeholder_text="0.3", font=self.f_padrao, fg_color="#f0f2f5", border_color="gray80", text_color="black")
 
         # ----------------------------------------------------
-        # --- NOVO BLOCO EXCLUSIVO SLS (CHECKLIST DE SEGURANÇA) ---
+        # --- BLOCO EXCLUSIVO SLS (CHECKLIST DE SEGURANÇA) ---
         # ----------------------------------------------------
         self.frm_sls_checklist = ctk.CTkFrame(frm, fg_color="#f8f9fa", corner_radius=10, border_width=1, border_color="#e0e0e0")
         
         ctk.CTkLabel(self.frm_sls_checklist, text="⚙️ Parâmetros Básicos e Checklist Crítico SLS", font=("Arial", 12, "bold"), text_color="#1f538d").grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(10, 5))
 
-        # Campo: Lote do Pó (Preenchido automaticamente)
-        ctk.CTkLabel(self.frm_sls_checklist, text="Lote do Pó:", font=self.f_padrao, text_color="gray30").grid(row=1, column=0, padx=15, pady=5, sticky="w")
-        self.ent_lote = ctk.CTkEntry(self.frm_sls_checklist, width=150, fg_color="white", border_color="gray80", text_color="black")
-        self.ent_lote.grid(row=1, column=1, padx=5, pady=5, sticky="w")
+        # Checkbox Inteligente para o Lote do Pó
+        self.chk_var_lote = tk.BooleanVar(value=False)
+        self.chk_lote = ctk.CTkCheckBox(self.frm_sls_checklist, text="Mesmo lote da produção anterior?", font=("Arial", 11, "bold"), variable=self.chk_var_lote, command=self.preencher_lote_automatico)
+        self.chk_lote.grid(row=1, column=0, columnspan=2, padx=15, pady=(5, 10), sticky="w")
 
-        # Campo: Fator de Escala
-        ctk.CTkLabel(self.frm_sls_checklist, text="Factor de escala:", font=self.f_padrao, text_color="gray30").grid(row=1, column=2, padx=15, pady=5, sticky="w")
-        self.ent_escala = ctk.CTkEntry(self.frm_sls_checklist, width=100, fg_color="white", border_color="gray80", text_color="black")
-        self.ent_escala.grid(row=1, column=3, padx=5, pady=5, sticky="w")
-        self.ent_escala.insert(0, "1.000")
+        ctk.CTkLabel(self.frm_sls_checklist, text="Lote do Pó:", font=self.f_padrao, text_color="gray30").grid(row=2, column=0, padx=15, pady=5, sticky="w")
+        self.ent_lote = ctk.CTkEntry(self.frm_sls_checklist, width=200, fg_color="white", border_color="gray80", text_color="black")
+        self.ent_lote.grid(row=2, column=1, columnspan=2, padx=5, pady=5, sticky="w")
 
-        # Variáveis booleanas dos 9 Checks da tua imagem (Todas nascem como True)
+        # Variáveis booleanas (AGORA TODAS FALSE POR DEFEITO)
         self.sls_vars = {
-            "slicefix": tk.BooleanVar(value=True),
-            "po_suficiente": tk.BooleanVar(value=True),
-            "abastecimento": tk.BooleanVar(value=True),
-            "home_pistao": tk.BooleanVar(value=True),
-            "home_rolo": tk.BooleanVar(value=True),
-            "z_adicional": tk.BooleanVar(value=True),
-            "chiller": tk.BooleanVar(value=True),
-            "ac": tk.BooleanVar(value=True),
-            "pre_aquecimento": tk.BooleanVar(value=True),
+            "slicefix": tk.BooleanVar(value=False),
+            "po_suficiente": tk.BooleanVar(value=False),
+            "abastecimento": tk.BooleanVar(value=False),
+            "home_pistao": tk.BooleanVar(value=False),
+            "home_rolo": tk.BooleanVar(value=False),
+            "z_adicional": tk.BooleanVar(value=False),
+            "chiller": tk.BooleanVar(value=False),
+            "ac": tk.BooleanVar(value=False),
+            "pre_aquecimento": tk.BooleanVar(value=False),
         }
 
-        # Grid de Checkboxes organizada horizontalmente em 3 colunas
+        # Grid de Checkboxes deslocada para baixo (linhas 3, 4 e 5)
         checks_config = [
-            ("SliceFix OK", "slicefix", 2, 0),
-            ("Quant. de pó suficiente", "po_suficiente", 2, 1),
-            ("Abastecim/ de pó ligado", "abastecimento", 2, 2),
-            ("Homing do Pistão", "home_pistao", 3, 0),
-            ("Homing da Rolo", "home_rolo", 3, 1),
-            ("Z adicional no topo", "z_adicional", 3, 2),
-            ("Chiller ligado", "chiller", 4, 0),
-            ("AC ligado", "ac", 4, 1),
-            ("Pre-aquecimento", "pre_aquecimento", 4, 2),
+            ("SliceFix OK", "slicefix", 3, 0),
+            ("Quant. de pó suficiente", "po_suficiente", 3, 1),
+            ("Abastecim/ de pó ligado", "abastecimento", 3, 2),
+            ("Homing do Pistão", "home_pistao", 4, 0),
+            ("Homing da Rolo", "home_rolo", 4, 1),
+            ("Z adicional no topo", "z_adicional", 4, 2),
+            ("Chiller ligado", "chiller", 5, 0),
+            ("AC ligado", "ac", 5, 1),
+            ("Pre-aquecimento", "pre_aquecimento", 5, 2),
         ]
 
         for text, key, row, col in checks_config:
@@ -133,13 +137,20 @@ class ProducaoTab:
             chk.grid(row=row, column=col, padx=15, pady=6, sticky="w")
         # ----------------------------------------------------
 
-        # Operador e Botão Salvar
-        self.lbl_resp = ctk.CTkLabel(frm, text="Operador (Iniciais):", font=self.f_padrao, text_color="gray30")
-        self.cmb_resp = ctk.CTkComboBox(frm, values=[], font=self.f_padrao, fg_color="white", border_color="gray80", text_color="black", button_color="#1f538d")
-
-        self.btn_salvar = ctk.CTkButton(frm, text="🚀 INICIAR FABRICO", fg_color="#28a745", hover_color="#218838", height=45, font=self.f_titulo, command=self.gravar_producao)
+        # Operador (Autenticado via Windows - Readonly)
+        self.lbl_resp = ctk.CTkLabel(frm, text="Operador (Autenticado):", font=self.f_padrao, text_color="gray30")
+        self.ent_resp = ctk.CTkEntry(frm, font=self.f_padrao, fg_color="#e9ecef", border_color="gray80", text_color="gray30")
+        
+        self.btn_salvar = ctk.CTkButton(frm, text="🚀 INICIAR FABRICO", fg_color="gray60", hover_color="#218838", state="disabled", height=45, font=self.f_titulo, command=self.gravar_producao)
         
         self.mudar_tecnologia("FDM")
+
+    def preencher_lote_automatico(self):
+        """ Injeta o lote anterior se a checkbox for marcada """
+        self.ent_lote.delete(0, ctk.END)
+        if self.chk_var_lote.get():
+            ultimo_lote = ProducaoService.obter_ultimo_lote_sls()
+            self.ent_lote.insert(0, ultimo_lote)
 
     def atualizar_combos(self, *args):
         tech = self.cmb_tech.get()
@@ -150,57 +161,49 @@ class ProducaoTab:
         self.cmb_proj.configure(values=JSONManager.carregar(ARQUIVO_PROJETOS))
         self.cmb_mat.configure(values=JSONManager.carregar(ARQUIVO_MATERIAIS))
         
-        logs = JSONManager.carregar(ARQUIVO_LOGS)
-        operadores = list(set([l.get("responsavel", "").strip() for l in logs if l.get("responsavel", "").strip()]))
-        self.cmb_resp.configure(values=operadores)
-        if not self.cmb_resp.get() and operadores:
-            self.cmb_resp.set(operadores[-1])
+        # Injeção das credenciais na Entry bloqueada
+        self.ent_resp.configure(state="normal")
+        self.ent_resp.delete(0, tk.END)
+        self.ent_resp.insert(0, self.obter_usuario_windows())
+        self.ent_resp.configure(state="readonly")
 
     def mudar_tecnologia(self, tech):
         self.atualizar_combos()
         
-        # Oculta todos antes de redesenhar a zona dinâmica
         self.lbl_quant.grid_remove(); self.ent_quant.grid_remove()
         self.lbl_altura.grid_remove(); self.ent_altura.grid_remove()
         self.lbl_perc.grid_remove(); self.ent_perc.grid_remove()
         self.frm_sls_checklist.grid_remove()
 
         if tech == "SLS":
-            # 1. Desenha os campos numéricos da SLS
             self.lbl_altura.grid(row=6, column=0, padx=15, pady=5, sticky="e")
             self.ent_altura.grid(row=6, column=1, columnspan=2, padx=15, pady=5, sticky="ew")
             self.lbl_perc.grid(row=7, column=0, padx=15, pady=5, sticky="e")
             self.ent_perc.grid(row=7, column=1, columnspan=2, padx=15, pady=5, sticky="ew")
             
-            # 2. Injeta o novo painel horizontal de checklist na linha 8
             self.frm_sls_checklist.grid(row=8, column=0, columnspan=3, padx=15, pady=10, sticky="ew")
             
-            # 3. Puxa as iniciais e o botão para baixo
             self.lbl_resp.grid(row=9, column=0, padx=15, pady=10, sticky="e")
-            self.cmb_resp.grid(row=9, column=1, columnspan=2, padx=15, pady=10, sticky="ew")
+            self.ent_resp.grid(row=9, column=1, columnspan=2, padx=15, pady=10, sticky="ew")
             self.btn_salvar.grid(row=10, column=0, columnspan=3, pady=20, padx=15, sticky="ew")
-            
-            # 4. Vai buscar automaticamente o lote da última produção SLS
-            ultimo_lote = ProducaoService.obter_ultimo_lote_sls()
-            self.ent_lote.delete(0, ctk.END)
-            self.ent_lote.insert(0, ultimo_lote)
         else:
-            # Layout padrão FDM/SLA
             self.lbl_quant.grid(row=6, column=0, padx=15, pady=10, sticky="e")
             self.ent_quant.grid(row=6, column=1, columnspan=2, padx=15, pady=10, sticky="ew")
+            
             self.lbl_resp.grid(row=7, column=0, padx=15, pady=10, sticky="e")
-            self.cmb_resp.grid(row=7, column=1, columnspan=2, padx=15, pady=10, sticky="ew")
+            self.ent_resp.grid(row=7, column=1, columnspan=2, padx=15, pady=10, sticky="ew")
             self.btn_salvar.grid(row=8, column=0, columnspan=3, pady=20, padx=15, sticky="ew")
         
         self.validar_restricoes_botao()
 
     def validar_restricoes_botao(self):
-        """ Se o operador estiver em modo SLS e desmarcar qualquer item, trava o botão """
+        """ Controla o bloqueio do botão baseado nos checks desmarcados da SLS """
         if self.cmb_tech.get() == "SLS":
             all_ok = all(var.get() for var in self.sls_vars.values())
             if not all_ok:
                 self.btn_salvar.configure(state="disabled", fg_color="gray60")
                 return
+        
         self.btn_salvar.configure(state="normal", fg_color="#28a745")
 
     def mapear_diretorio(self):
@@ -220,7 +223,6 @@ class ProducaoTab:
         altura_c = 0.0
         perc_p = 0.0
         lote_atual = ""
-        escala_atual = "1.000"
         
         if tech == "SLS":
             try:
@@ -228,7 +230,6 @@ class ProducaoTab:
                 perc_p = float(self.ent_perc.get().strip().replace(',', '.'))
                 q_maq = ProducaoService.calcular_consumo_sls(altura_c, perc_p)
                 lote_atual = self.ent_lote.get().strip()
-                escala_atual = self.ent_escala.get().strip()
                 
                 if not lote_atual:
                     messagebox.showerror("Erro", "O campo Lote do Pó é obrigatório para tecnologia SLS.")
@@ -242,7 +243,7 @@ class ProducaoTab:
                 messagebox.showerror("Erro", "Quantidade inválida.")
                 return
 
-        if not self.cmb_proj.get() or not self.cmb_resp.get() or not self.ent_pasta.get() or "Nenhuma" in self.cmb_maq.get():
+        if not self.cmb_proj.get() or not self.ent_pasta.get() or "Nenhuma" in self.cmb_maq.get():
             messagebox.showerror("Aviso", "Preenche todos os campos antes de iniciar o fabrico.")
             return
 
@@ -255,21 +256,24 @@ class ProducaoTab:
             "data_inicio": datetime.now().strftime("%Y-%m-%d"),
             "hora_maquina": t_maq, "material": self.cmb_mat.get(), 
             "quantidade": round(q_maq, 4), "altura": altura_c, "perc_po": perc_p,
-            "tecnologia": tech, "responsavel": self.cmb_resp.get().strip(),
+            "tecnologia": tech, "responsavel": self.ent_resp.get(),
             "estado": "Em Andamento", "erro": "",
-            "lote_po": lote_atual, "fator_escala": escala_atual # Chaves salvas na raiz do dicionário
+            "lote_po": lote_atual
         }
         
         logs.append(novo_log)
         JSONManager.salvar(logs, ARQUIVO_LOGS)
         
-        messagebox.showinfo("Sucesso", "Produção SLS salva na base de dados JSON!")
+        messagebox.showinfo("Sucesso", "Produção salva na base de dados JSON!")
         
-        # Limpeza e reset dos campos e variáveis
+        # Limpeza e reset rigoroso de segurança
         self.ent_tempo.delete(0, tk.END)
         if tech == "SLS":
-            self.ent_altura.delete(0, tk.END); self.ent_perc.delete(0, tk.END)
-            for var in self.sls_vars.values(): var.set(True) # Força voltar a True
+            self.ent_altura.delete(0, tk.END)
+            self.ent_perc.delete(0, tk.END)
+            self.ent_lote.delete(0, tk.END)
+            self.chk_var_lote.set(False)
+            for var in self.sls_vars.values(): var.set(False) # Volta a desmarcar tudo
         else:
             self.ent_quant.delete(0, tk.END)
         

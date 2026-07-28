@@ -16,52 +16,76 @@ class HistoricoTab:
         self.f_titulo = f_titulo
         self.master_app = master_app
 
-        # Configura o fundo cinza claro idêntico ao ecrã de impressoras
         self.parent.configure(fg_color="#f0f2f5")
 
         self.construir_layout()
+        self.carregar_combos_filtro()
         self.atualizar_tabela()
 
     def construir_layout(self):
-        # 1. HEADER & FILTROS 
+        # 1. HEADER & TÍTULO
         frm_header = ctk.CTkFrame(self.parent, fg_color="transparent")
-        frm_header.pack(fill="x", padx=20, pady=(20, 10))
-        
+        frm_header.pack(fill="x", padx=20, pady=(20, 5))
         ctk.CTkLabel(frm_header, text="Dashboard de Produção", font=ctk.CTkFont(size=22, weight="bold"), text_color="#1f538d").pack(side="left")
         
-        # Container de filtros à direita com design limpo
-        frm_flt = ctk.CTkFrame(frm_header, fg_color="transparent")
-        frm_flt.pack(side="right")
+        # 2. PAINEL DE FILTROS AVANÇADOS
+        frm_flt = ctk.CTkFrame(self.parent, fg_color="white", corner_radius=8, border_width=1, border_color="#e0e0e0")
+        frm_flt.pack(fill="x", padx=20, pady=5)
         
-        ctk.CTkLabel(frm_flt, text="Projeto:", font=self.f_padrao, text_color="gray40").grid(row=0, column=0, padx=5)
-        self.flt_p = ctk.CTkEntry(frm_flt, width=130, font=self.f_padrao, fg_color="white", border_color="#e0e0e0", text_color="black")
-        self.flt_p.grid(row=0, column=1, padx=5)
+        # Linha 1 de Filtros
+        ctk.CTkLabel(frm_flt, text="Data Início:", font=self.f_padrao, text_color="gray40").grid(row=0, column=0, padx=10, pady=10, sticky="e")
+        self.flt_data_ini = ctk.CTkEntry(frm_flt, width=120, placeholder_text="YYYY-MM-DD", font=self.f_padrao, fg_color="#f0f2f5", text_color="black")
+        self.flt_data_ini.grid(row=0, column=1, padx=5, pady=10)
+        self.flt_data_ini.bind("<KeyRelease>", lambda e: self.atualizar_tabela())
+
+        ctk.CTkLabel(frm_flt, text="Data Fim:", font=self.f_padrao, text_color="gray40").grid(row=0, column=2, padx=10, pady=10, sticky="e")
+        self.flt_data_fim = ctk.CTkEntry(frm_flt, width=120, placeholder_text="YYYY-MM-DD", font=self.f_padrao, fg_color="#f0f2f5", text_color="black")
+        self.flt_data_fim.grid(row=0, column=3, padx=5, pady=10)
+        self.flt_data_fim.bind("<KeyRelease>", lambda e: self.atualizar_tabela())
+
+        ctk.CTkLabel(frm_flt, text="Máquina:", font=self.f_padrao, text_color="gray40").grid(row=0, column=4, padx=10, pady=10, sticky="e")
+        self.flt_maq = ctk.CTkComboBox(frm_flt, values=["Todas"], width=140, font=self.f_padrao, fg_color="#f0f2f5", text_color="black", command=lambda e: self.atualizar_tabela())
+        self.flt_maq.grid(row=0, column=5, padx=5, pady=10)
+
+        ctk.CTkLabel(frm_flt, text="Estado:", font=self.f_padrao, text_color="gray40").grid(row=0, column=6, padx=10, pady=10, sticky="e")
+        self.flt_estado = ctk.CTkComboBox(frm_flt, values=["Todos", "Em Andamento", "Concluída", "Cancelada"], width=140, font=self.f_padrao, fg_color="#f0f2f5", text_color="black", command=lambda e: self.atualizar_tabela())
+        self.flt_estado.grid(row=0, column=7, padx=5, pady=10)
+
+        # Linha 2 de Filtros
+        ctk.CTkLabel(frm_flt, text="Projeto:", font=self.f_padrao, text_color="gray40").grid(row=1, column=0, padx=10, pady=(0,10), sticky="e")
+        self.flt_p = ctk.CTkEntry(frm_flt, width=120, font=self.f_padrao, fg_color="#f0f2f5", text_color="black")
+        self.flt_p.grid(row=1, column=1, padx=5, pady=(0,10))
         self.flt_p.bind("<KeyRelease>", lambda e: self.atualizar_tabela())
 
-        ctk.CTkLabel(frm_flt, text="Material:", font=self.f_padrao, text_color="gray40").grid(row=0, column=2, padx=5)
-        self.flt_m = ctk.CTkEntry(frm_flt, width=130, font=self.f_padrao, fg_color="white", border_color="#e0e0e0", text_color="black")
-        self.flt_m.grid(row=0, column=3, padx=5)
+        ctk.CTkLabel(frm_flt, text="Material:", font=self.f_padrao, text_color="gray40").grid(row=1, column=2, padx=10, pady=(0,10), sticky="e")
+        self.flt_m = ctk.CTkEntry(frm_flt, width=120, font=self.f_padrao, fg_color="#f0f2f5", text_color="black")
+        self.flt_m.grid(row=1, column=3, padx=5, pady=(0,10))
         self.flt_m.bind("<KeyRelease>", lambda e: self.atualizar_tabela())
 
+        ctk.CTkLabel(frm_flt, text="Cód. Falha:", font=self.f_padrao, text_color="gray40").grid(row=1, column=4, padx=10, pady=(0,10), sticky="e")
+        self.flt_cod = ctk.CTkEntry(frm_flt, width=140, placeholder_text="Ex: COD001", font=self.f_padrao, fg_color="#f0f2f5", text_color="black")
+        self.flt_cod.grid(row=1, column=5, padx=5, pady=(0,10))
+        self.flt_cod.bind("<KeyRelease>", lambda e: self.atualizar_tabela())
 
-    # 2. CARDS DE KPI (Com Ícones Modernos em Unicode e Cores Combinadas)
+        ctk.CTkButton(frm_flt, text="Limpar Filtros", width=140, fg_color="#e0e0e0", text_color="black", hover_color="#d6d6d6", font=self.f_padrao, command=self.limpar_filtros).grid(row=1, column=7, padx=5, pady=(0,10))
+
+        # 3. CARDS DE KPI
         frm_kpi = ctk.CTkFrame(self.parent, fg_color="transparent")
         frm_kpi.pack(fill="x", padx=20, pady=10)
         
-        self.lbl_kpi_total = self.criar_card_kpi(frm_kpi, "📦 Produções Concluídas", "0", "#1f538d")
+        self.lbl_kpi_total = self.criar_card_kpi(frm_kpi, "📦 Produções Filtradas", "0", "#1f538d")
         self.lbl_kpi_taxa = self.criar_card_kpi(frm_kpi, "🎯 Taxa de Sucesso", "0.0%", "#28a745")
         self.lbl_kpi_horas = self.criar_card_kpi(frm_kpi, "⏱️ Total de Horas", "00:00", "#e0a800")
 
-        # 3. CONTAINER DA TABELA (Bloco Branco Estilo Card Único)
+        # 4. CONTAINER DA TABELA
         frm_conteudo = ctk.CTkFrame(self.parent, fg_color="white", corner_radius=12, border_width=1, border_color="#e0e0e0")
-        frm_conteudo.pack(fill="both", expand=True, padx=20, pady=10)
+        frm_conteudo.pack(fill="both", expand=True, padx=20, pady=5)
 
         cols = ("id", "data", "projeto", "maquina", "material", "qnt", "tempo", "estado")
         self.tab_tree = ttk.Treeview(frm_conteudo, columns=cols, show="headings", style="Dashboard.Treeview")
         for c in cols: 
             self.tab_tree.heading(c, text=c.upper())
         
-        # Distribuição profissional de larguras
         self.tab_tree.column("id", width=50, anchor="center")
         self.tab_tree.column("data", width=100, anchor="center")
         self.tab_tree.column("projeto", width=150, anchor="w")
@@ -73,15 +97,14 @@ class HistoricoTab:
 
         self.tab_tree.bind("<Double-1>", self.abrir_tratamento_ordem)
 
-        # Scrollbar elegante integrada na margem do card
         sb = ttk.Scrollbar(frm_conteudo, orient="vertical", command=self.tab_tree.yview)
         self.tab_tree.configure(yscrollcommand=sb.set)
         sb.pack(fill="y", side="right", pady=10, padx=(0, 5))
         self.tab_tree.pack(fill="both", expand=True, side="left", padx=10, pady=10)
 
-        # 4. BARRA DE AÇÕES INFERIOR MODERNA
+        # 5. BARRA DE AÇÕES INFERIOR
         frm_acoes = ctk.CTkFrame(self.parent, fg_color="transparent")
-        frm_acoes.pack(fill="x", padx=20, pady=(5, 20))
+        frm_acoes.pack(fill="x", padx=20, pady=(5, 15))
         
         ctk.CTkButton(frm_acoes, text="Clonar Ordem", fg_color="#e8f0fe", text_color="#1f538d", hover_color="#d2e3fc", height=35, font=self.f_padrao, command=self.clonar_log).pack(side="left", padx=5)
         ctk.CTkButton(frm_acoes, text="Exportar Dados (CSV)", fg_color="#1f538d", text_color="white", hover_color="#143a63", height=35, font=self.f_padrao, command=self.exportar_csv).pack(side="left", padx=5)
@@ -90,23 +113,43 @@ class HistoricoTab:
         self.configurar_estilo_tabela()
 
     def criar_card_kpi(self, parent, titulo, valor, cor_destaque):
-        card = ctk.CTkFrame(parent, fg_color="white", corner_radius=12, border_width=1, border_color="#e0e0e0", height=100)
+        card = ctk.CTkFrame(parent, fg_color="white", corner_radius=12, border_width=1, border_color="#e0e0e0", height=80)
         card.pack(side="left", fill="x", expand=True, padx=5)
         card.pack_propagate(False)
         
-        # Alterado text_color para "gray20" para dar mais leitura ao ícone e ao título
-        ctk.CTkLabel(card, text=titulo, text_color="gray20", font=ctk.CTkFont(family="Arial", size=13, weight="bold")).pack(anchor="w", padx=15, pady=(15, 0))
-        lbl_valor = ctk.CTkLabel(card, text=valor, text_color=cor_destaque, font=ctk.CTkFont(size=28, weight="bold"))
-        lbl_valor.pack(anchor="w", padx=15, pady=5)
+        ctk.CTkLabel(card, text=titulo, text_color="gray20", font=ctk.CTkFont(family="Arial", size=13, weight="bold")).pack(anchor="w", padx=15, pady=(10, 0))
+        lbl_valor = ctk.CTkLabel(card, text=valor, text_color=cor_destaque, font=ctk.CTkFont(size=24, weight="bold"))
+        lbl_valor.pack(anchor="w", padx=15, pady=2)
         return lbl_valor
 
     def configurar_estilo_tabela(self):
         style = ttk.Style()
         style.theme_use("default")
-        # Customização fina para matar o visual cru do Windows
         style.configure("Dashboard.Treeview", background="white", foreground="#2d3748", font=("Arial", 11), rowheight=32, fieldbackground="white", borderwidth=0)
         style.configure("Dashboard.Treeview.Heading", background="#f8f9fa", foreground="gray40", font=("Arial", 10, "bold"), borderwidth=0, rowheight=35)
         style.map("Dashboard.Treeview", background=[("selected", "#1f538d")], foreground=[("selected", "white")])
+
+    def carregar_combos_filtro(self):
+        logs = JSONManager.carregar(ARQUIVO_LOGS)
+        maquinas = ["Todas"] + sorted(list(set(l.get("id_maquina", "") for l in logs if l.get("id_maquina"))))
+        self.flt_maq.configure(values=maquinas)
+        self.flt_maq.set("Todas")
+
+    def limpar_filtros(self):
+        self.flt_data_ini.delete(0, tk.END)
+        self.flt_data_fim.delete(0, tk.END)
+        self.flt_p.delete(0, tk.END)
+        self.flt_m.delete(0, tk.END)
+        self.flt_cod.delete(0, tk.END)
+        self.flt_maq.set("Todas")
+        self.flt_estado.set("Todos")
+        self.atualizar_tabela()
+
+    def parse_data_segura(self, data_str):
+        try:
+            return datetime.strptime(data_str, "%Y-%m-%d").date()
+        except ValueError:
+            return None
 
     def atualizar_tabela(self):
         for i in self.tab_tree.get_children(): 
@@ -114,8 +157,14 @@ class HistoricoTab:
         
         proj_q = self.flt_p.get().lower()
         mat_q = self.flt_m.get().lower()
+        cod_q = self.flt_cod.get().lower()
+        maq_q = self.flt_maq.get()
+        est_q = self.flt_estado.get()
+        
+        d_ini = self.parse_data_segura(self.flt_data_ini.get())
+        d_fim = self.parse_data_segura(self.flt_data_fim.get())
 
-        total_pecas = 0
+        total_filtradas = 0
         sucesso_pecas = 0
         total_horas = 0.0
 
@@ -123,25 +172,46 @@ class HistoricoTab:
         logs.sort(key=lambda x: int(x.get("id", 0)), reverse=True)
 
         for l in logs:
-            proj_str = str(l.get("nr_projeto", "")).lower()
-            mat_str = str(l.get("material", "")).lower()
+            # Filtros de Texto
+            if proj_q and proj_q not in str(l.get("nr_projeto", "")).lower(): continue
+            if mat_q and mat_q not in str(l.get("material", "")).lower(): continue
+            if cod_q and cod_q not in str(l.get("erro", "")).lower(): continue
             
-            if (proj_q in proj_str) and (mat_q in mat_str):
-                self.tab_tree.insert("", "end", values=(
-                    l.get("id"), l.get("data_inicio", ""), l.get("nr_projeto", ""), l.get("id_maquina", ""), 
-                    l.get("material", ""), l.get("quantidade", 0.0), l.get("hora_maquina", "00:00"), 
-                    l.get("estado", "Em Andamento")
-                ))
-                
-                total_pecas += 1
-                if l.get("estado") == "Concluída": 
-                    sucesso_pecas += 1
-                total_horas += ProducaoService.converter_para_horas(l.get("hora_maquina", "00:00"))
+            # Filtros de Combobox
+            if maq_q != "Todas" and l.get("id_maquina") != maq_q: continue
+            
+            estado_log = l.get("estado", "Em Andamento")
+            # Correção de compatibilidade caso logs antigos tenham "Falha"
+            if estado_log == "Falha": estado_log = "Cancelada" 
+            if est_q != "Todos" and estado_log != est_q: continue
 
-        taxa = (sucesso_pecas / total_pecas * 100) if total_pecas > 0 else 0.0
+            # Filtros de Data
+            log_data = self.parse_data_segura(l.get("data_inicio", ""))
+            if log_data:
+                if d_ini and log_data < d_ini: continue
+                if d_fim and log_data > d_fim: continue
+
+            # Se passou em todos os filtros, insere na tabela!
+            # Prioriza mostrar os dados reais (se existirem) em vez da estimativa
+            tempo_mostrar = l.get("tempo_real", l.get("hora_maquina", "00:00"))
+            qtd_mostrar = l.get("quantidade_real", l.get("quantidade", 0.0))
+
+            self.tab_tree.insert("", "end", values=(
+                l.get("id"), l.get("data_inicio", ""), l.get("nr_projeto", ""), l.get("id_maquina", ""), 
+                l.get("material", ""), qtd_mostrar, tempo_mostrar, estado_log
+            ))
+            
+            # Cálculos de KPI focados apenas nas peças listadas no ecrã
+            total_filtradas += 1
+            if estado_log == "Concluída": 
+                sucesso_pecas += 1
+            total_horas += ProducaoService.converter_para_horas(tempo_mostrar)
+
+        # Taxa de sucesso ignora as peças "Em Andamento" para não puxar a média para baixo
+        pecas_finalizadas = sum(1 for item in self.tab_tree.get_children() if self.tab_tree.item(item)['values'][7] in ["Concluída", "Cancelada"])
+        taxa = (sucesso_pecas / pecas_finalizadas * 100) if pecas_finalizadas > 0 else 0.0
         
-        # Injeção correta nos novos cards baseados na tua análise
-        self.lbl_kpi_total.configure(text=str(sucesso_pecas))
+        self.lbl_kpi_total.configure(text=str(total_filtradas))
         self.lbl_kpi_taxa.configure(text=f"{taxa:.1f}%")
         self.lbl_kpi_horas.configure(text=ProducaoService.converter_para_string(total_horas))
 
@@ -183,9 +253,13 @@ class HistoricoTab:
                 novo_log["data_inicio"] = datetime.now().strftime("%Y-%m-%d")
                 novo_log["estado"] = "Em Andamento"
                 novo_log["erro"] = ""
+                # Limpa dados reais na clonagem, pois a nova peça volta a ser estimada
+                novo_log.pop("tempo_real", None)
+                novo_log.pop("quantidade_real", None)
                 
                 logs.append(novo_log)
                 JSONManager.salvar(logs, ARQUIVO_LOGS)
+                self.carregar_combos_filtro()
                 self.atualizar_tabela()
                 messagebox.showinfo("Clonado", "Nova impressão registada com base na anterior.")
                 break
@@ -215,4 +289,5 @@ class HistoricoTab:
         if messagebox.askyesno("Aviso", "Remover do histórico local permanentemente?"):
             logs = [l for l in JSONManager.carregar(ARQUIVO_LOGS) if l.get("id") != id_reg]
             JSONManager.salvar(logs, ARQUIVO_LOGS)
+            self.carregar_combos_filtro()
             self.atualizar_tabela()

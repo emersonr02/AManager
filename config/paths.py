@@ -17,3 +17,5 @@ ARQUIVO_MAQUINAS = os.path.join(DATA_DIR, "parque_maquinas.json")
 ARQUIVO_PROJETOS = os.path.join(DATA_DIR, "projetos.json")
 ARQUIVO_MATERIAIS = os.path.join(DATA_DIR, "materiais.json")
 ARQUIVO_PEDIDOS = os.path.join(DATA_DIR, "pedidos.json")
+ARQUIVO_NC_FALHAS = "data/nc_falhas.json"
+ARQUIVO_ACOES = "data/acoes_corretivas.json"
