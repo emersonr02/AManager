@@ -19,3 +19,4 @@ ARQUIVO_MATERIAIS = os.path.join(DATA_DIR, "materiais.json")
 ARQUIVO_PEDIDOS = "data/pedidos.json"
 ARQUIVO_NC_FALHAS = "data/nc_falhas.json"
 ARQUIVO_ACOES = "data/acoes_corretivas.json"
+ARQUIVO_IMPRESSORAS = os.path.join(DATA_DIR, "impressoras.json") # ou o nome do ficheiro json que usas
