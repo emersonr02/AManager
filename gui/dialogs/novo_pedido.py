@@ -1,57 +1,199 @@
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox
-from services.pedido_service import PedidoService
+from datetime import datetime
+
+from config.paths import ARQUIVO_PEDIDOS, ARQUIVO_PROJETOS, ARQUIVO_MATERIAIS
 from database.json_manager import JSONManager
-from config.paths import ARQUIVO_PROJETOS
 
 class JanelaNovoPedido(ctk.CTkToplevel):
-    def __init__(self, parent, callback_atualizar, f_padrao, f_titulo):
+    def __init__(self, parent, callback_atualizar):
         super().__init__(parent)
-        self.title("Criar Novo Pedido")
-        self.geometry("450x550")
+        self.callback_atualizar = callback_atualizar
+        
+        self.title("Criar Novo Pedido de Produção")
+        self.geometry("820x820")
+        self.configure(fg_color="#fcfcfc")
+        self.resizable(False, False)
+        
         self.transient(parent)
         self.grab_set()
+
+        self.linhas_pecas = [] 
+        self.carregar_dados_auxiliares()
+        self.construir_layout()
+
+    def carregar_dados_auxiliares(self):
+        """ Carrega os dados dos ficheiros JSON aceitando Strings ou Dicionários """
+        # 1. Projetos
+        projs = JSONManager.carregar(ARQUIVO_PROJETOS)
+        self.lista_projetos_fmt = []
+        for p in projs:
+            if isinstance(p, dict):
+                id_p = p.get("id", p.get("nr_projeto", p.get("numero", "")))
+                nome_p = p.get("nome", p.get("nome_projeto", ""))
+                self.lista_projetos_fmt.append(f"{id_p} - {nome_p}" if nome_p else str(id_p))
+            elif isinstance(p, str):
+                self.lista_projetos_fmt.append(p)
+
+        if not self.lista_projetos_fmt:
+            self.lista_projetos_fmt = ["Sem projetos registados"]
+
+        # 2. Materiais
+        mats = JSONManager.carregar(ARQUIVO_MATERIAIS)
+        self.lista_materiais_fmt = []
+        for m in mats:
+            if isinstance(m, dict):
+                nome_m = m.get("nome", m.get("material", m.get("nome_material", "")))
+                fab = m.get("fabricante", "")
+                self.lista_materiais_fmt.append(f"{nome_m} ({fab})" if fab else str(nome_m))
+            elif isinstance(m, str):
+                self.lista_materiais_fmt.append(m)
+
+        if not self.lista_materiais_fmt:
+            self.lista_materiais_fmt = ["N/A"]
+
+    def construir_layout(self):
+        ctk.CTkLabel(self, text="Criar Novo Pedido", font=("Arial", 18, "bold"), text_color="#1f538d").pack(pady=(15, 5))
+
+        # --- 1. CABEÇALHO DO PEDIDO (MASTER) ---
+        frm_master = ctk.CTkFrame(self, fg_color="white", border_width=1, border_color="#e0e0e0", corner_radius=8)
+        frm_master.pack(fill="x", padx=20, pady=10)
+
+        # Linha 1
+        ctk.CTkLabel(frm_master, text="Requerente (Email):", font=("Arial", 11, "bold"), text_color="gray40").grid(row=0, column=0, padx=10, pady=(15, 5), sticky="w")
+        self.ent_req = ctk.CTkEntry(frm_master, width=220, fg_color="#f0f2f5", text_color="black")
+        self.ent_req.grid(row=0, column=1, padx=10, pady=(15, 5), sticky="w")
+
+        ctk.CTkLabel(frm_master, text="Data de Entrega:", font=("Arial", 11, "bold"), text_color="gray40").grid(row=0, column=2, padx=10, pady=(15, 5), sticky="w")
+        self.ent_data = ctk.CTkEntry(frm_master, width=150, placeholder_text="YYYY-MM-DD", fg_color="#f0f2f5", text_color="black")
+        self.ent_data.grid(row=0, column=3, padx=10, pady=(15, 5), sticky="w")
+
+        # Linha 2: SELECT BOX DO PROJETO (Em vez de Entry)
+        ctk.CTkLabel(frm_master, text="Projeto (NR - Nome):", font=("Arial", 11, "bold"), text_color="gray40").grid(row=1, column=0, padx=10, pady=5, sticky="w")
+        self.cmb_proj = ctk.CTkComboBox(frm_master, values=self.lista_projetos_fmt, width=220, fg_color="#f0f2f5", text_color="black", state="readonly")
+        self.cmb_proj.grid(row=1, column=1, padx=10, pady=5, sticky="w")
+
+        ctk.CTkLabel(frm_master, text="Tecnologia Base:", font=("Arial", 11, "bold"), text_color="gray40").grid(row=1, column=2, padx=10, pady=5, sticky="w")
+        self.cmb_tech = ctk.CTkComboBox(frm_master, values=["FDM", "SLA", "SLS"], width=150, fg_color="#f0f2f5", text_color="black", state="readonly")
+        self.cmb_tech.grid(row=1, column=3, padx=10, pady=5, sticky="w")
+
+        # Linha 3
+        ctk.CTkLabel(frm_master, text="Link / Pasta (Rede):", font=("Arial", 11, "bold"), text_color="gray40").grid(row=2, column=0, padx=10, pady=5, sticky="w")
+        self.ent_link = ctk.CTkEntry(frm_master, width=490, fg_color="#f0f2f5", text_color="black")
+        self.ent_link.grid(row=2, column=1, columnspan=3, padx=10, pady=5, sticky="w")
+
+        # Linha 4
+        ctk.CTkLabel(frm_master, text="Observações:", font=("Arial", 11, "bold"), text_color="gray40").grid(row=3, column=0, padx=10, pady=(5, 15), sticky="nw")
+        self.txt_obs = ctk.CTkTextbox(frm_master, width=490, height=50, fg_color="#f0f2f5", text_color="black")
+        self.txt_obs.grid(row=3, column=1, columnspan=3, padx=10, pady=(5, 15), sticky="w")
+
+        # --- 2. GRELHA DINÂMICA DE PEÇAS (DETAIL) ---
+        frm_titulo_pecas = ctk.CTkFrame(self, fg_color="transparent")
+        frm_titulo_pecas.pack(fill="x", padx=20, pady=(10, 0))
         
-        self.callback = callback_atualizar
-        self.f_padrao = f_padrao
-        
-        # Fundo branco para combinar com o tema
-        self.configure(fg_color="#fcfcfc")
-        
-        ctk.CTkLabel(self, text="Detalhes do Pedido", font=f_titulo).pack(pady=15)
+        ctk.CTkLabel(frm_titulo_pecas, text="Lista de Peças a Fabricar:", font=("Arial", 13, "bold"), text_color="#1f538d").pack(side="left")
+        ctk.CTkButton(frm_titulo_pecas, text="+ Adicionar Peça", fg_color="#28a745", hover_color="#218838", width=120, height=28, command=self.adicionar_linha_peca).pack(side="right")
 
-        ctk.CTkLabel(self, text="Requerente (Nome/Email):", font=f_padrao).pack(anchor="w", padx=20)
-        self.ent_ped_req = ctk.CTkEntry(self, font=f_padrao, fg_color="white")
-        self.ent_ped_req.pack(fill="x", padx=20, pady=5)
+        self.frm_scroll_pecas = ctk.CTkScrollableFrame(self, fg_color="#f8f9fa", border_width=1, border_color="#e0e0e0", corner_radius=8, height=220)
+        self.frm_scroll_pecas.pack(fill="x", padx=20, pady=5)
 
-        ctk.CTkLabel(self, text="Projeto:", font=f_padrao).pack(anchor="w", padx=20)
-        projetos = JSONManager.carregar(ARQUIVO_PROJETOS)
-        self.cmb_ped_proj = ctk.CTkComboBox(self, values=projetos, font=f_padrao, fg_color="white", state="readonly")
-        self.cmb_ped_proj.pack(fill="x", padx=20, pady=5)
+        self.adicionar_linha_peca()
 
-        ctk.CTkLabel(self, text="Tecnologia:", font=f_padrao).pack(anchor="w", padx=20)
-        self.cmb_ped_tech = ctk.CTkComboBox(self, values=["FDM", "SLA", "SLS"], font=f_padrao, fg_color="white", state="readonly")
-        self.cmb_ped_tech.pack(fill="x", padx=20, pady=5)
+        # --- BOTÃO SALVAR ---
+        self.btn_salvar = ctk.CTkButton(self, text="REGISTAR NOVO PEDIDO", fg_color="#1f538d", hover_color="#143a63", text_color="white", font=("Arial", 13, "bold"), command=self.salvar_pedido, height=45)
+        self.btn_salvar.pack(fill="x", padx=20, pady=20)
 
-        ctk.CTkLabel(self, text="Observação (Qtd / Prioridade):", font=f_padrao).pack(anchor="w", padx=20)
-        self.ent_ped_obs = ctk.CTkTextbox(self, height=80, font=f_padrao, fg_color="white")
-        self.ent_ped_obs.pack(fill="x", padx=20, pady=5)
+    def adicionar_linha_peca(self):
+        """ Cria dinamicamente uma nova linha com Select Box para o Material """
+        linha_frm = ctk.CTkFrame(self.frm_scroll_pecas, fg_color="transparent")
+        linha_frm.pack(fill="x", pady=3)
 
-        ctk.CTkButton(self, text="REGISTAR PEDIDO", fg_color="#1f538d", text_color="white", font=f_titulo, command=self.gravar).pack(fill="x", padx=20, pady=30)
+        ent_pn = ctk.CTkEntry(linha_frm, placeholder_text="Part Number (Ex: AQF-001)", width=280, fg_color="white", text_color="black")
+        ent_pn.pack(side="left", padx=(5, 10))
 
-    def gravar(self):
-        req = self.ent_ped_req.get().strip()
-        proj = self.cmb_ped_proj.get()
-        
-        if not req or not proj:
-            messagebox.showwarning("Aviso", "Preencha o requerente e o projeto.")
+        # SELECT BOX DO MATERIAL (Em vez de Entry)
+        cmb_mat = ctk.CTkComboBox(linha_frm, values=self.lista_materiais_fmt, width=220, fg_color="white", text_color="black", state="readonly")
+        cmb_mat.pack(side="left", padx=(0, 10))
+
+        ent_qtd = ctk.CTkEntry(linha_frm, placeholder_text="Qtd", width=70, fg_color="white", text_color="black")
+        ent_qtd.pack(side="left", padx=(0, 10))
+
+        btn_remover = ctk.CTkButton(linha_frm, text="X", width=30, fg_color="#dc3545", hover_color="#c82333", command=lambda f=linha_frm: self.remover_linha(f))
+        btn_remover.pack(side="left")
+
+        self.linhas_pecas.append({"frame": linha_frm, "pn": ent_pn, "mat": cmb_mat, "qtd": ent_qtd})
+
+    def remover_linha(self, frame_alvo):
+        frame_alvo.destroy()
+        self.linhas_pecas = [linha for linha in self.linhas_pecas if linha["frame"] != frame_alvo]
+
+    def salvar_pedido(self):
+        req = self.ent_req.get().strip()
+        proj_sel = self.cmb_proj.get()
+        data_ent = self.ent_data.get().strip()
+        link = self.ent_link.get().strip()
+        tech = self.cmb_tech.get()
+        obs = self.txt_obs.get("1.0", tk.END).strip()
+
+        if not req or not data_ent or proj_sel == "Sem projetos registados":
+            messagebox.showerror("Erro", "Requerente, Projeto e Data de Entrega são obrigatórios.")
             return
 
-        PedidoService.criar_pedido(
-            requerente=req, projeto=proj, tecnologia=self.cmb_ped_tech.get(),
-            responsavel="Sistema", observacao=self.ent_ped_obs.get("1.0", tk.END).strip()
-        )
-        
-        self.callback()
+        if len(self.linhas_pecas) == 0:
+            messagebox.showerror("Erro", "O pedido deve conter pelo menos uma peça.")
+            return
+
+        # Separa o número do nome do projeto se houver o separador "-"
+        if " - " in proj_sel:
+            partes = proj_sel.split(" - ", 1)
+            nr_proj, nome_proj = partes[0], partes[1]
+        else:
+            nr_proj, nome_proj = proj_sel, ""
+
+        lista_pecas = []
+        for linha in self.linhas_pecas:
+            pn = linha["pn"].get().strip()
+            mat_peca = linha["mat"].get()
+            qtd_str = linha["qtd"].get().strip()
+            
+            if not pn or not qtd_str:
+                messagebox.showerror("Erro", "Todas as peças listadas devem ter PN e Quantidade preenchidos.")
+                return
+            
+            if not qtd_str.isdigit() or int(qtd_str) <= 0:
+                messagebox.showerror("Erro", f"A quantidade da peça '{pn}' tem de ser um número inteiro válido.")
+                return
+                
+            lista_pecas.append({
+                "pn": pn,
+                "material": mat_peca,
+                "qtd_solicitada": int(qtd_str),
+                "qtd_produzida": 0
+            })
+
+        pedidos = JSONManager.carregar(ARQUIVO_PEDIDOS)
+        novo_id = max([p.get("id_pedido", p.get("id", 0)) for p in pedidos]) + 1 if pedidos else 1
+
+        novo_pedido = {
+            "id": novo_id,
+            "requerente_email": req,
+            "nr_projeto": nr_proj,
+            "nome_projeto": nome_proj,
+            "tecnologia": tech,
+            "observacoes": obs,
+            "data_pedido": datetime.now().strftime("%Y-%m-%d"),
+            "data_entrega": data_ent,
+            "data_atualizacao": datetime.now().strftime("%Y-%m-%d"),
+            "link_arquivos": link,
+            "estado": "Pendente",
+            "pecas": lista_pecas,
+            "producoes_vinculadas": []
+        }
+
+        pedidos.append(novo_pedido)
+        JSONManager.salvar(pedidos, ARQUIVO_PEDIDOS)
+
+        messagebox.showinfo("Sucesso", "Pedido registado com sucesso!")
+        self.callback_atualizar()
         self.destroy()

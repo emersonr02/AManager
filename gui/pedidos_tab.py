@@ -1,15 +1,16 @@
 import customtkinter as ctk
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from services.pedido_service import PedidoService
 from gui.dialogs.novo_pedido import JanelaNovoPedido
 from gui.dialogs.editar_pedido import JanelaEditarPedido
 
 class PedidosTab:
-    def __init__(self, parent_frame, f_padrao, f_titulo):
+    def __init__(self, parent_frame, f_padrao, f_titulo, master_app=None):
         self.parent = parent_frame
         self.f_padrao = f_padrao
         self.f_titulo = f_titulo
+        self.master_app = master_app
         
         # Fundo ligeiramente cinza para fazer os cartões brancos "saltarem"
         self.parent.configure(fg_color="#f0f2f5")
@@ -23,9 +24,9 @@ class PedidosTab:
         frm_header.pack(fill="x", padx=20, pady=(20, 10))
         
         ctk.CTkLabel(frm_header, text="Gestão de Pedidos", font=ctk.CTkFont(size=22, weight="bold"), text_color="#1f538d").pack(side="left")
-        ctk.CTkButton(frm_header, text="+ Novo Pedido", fg_color="#28a745", text_color="white", font=self.f_padrao, command=self.abrir_novo_pedido).pack(side="right")
+        ctk.CTkButton(frm_header, text="+ Novo Pedido", fg_color="#28a745", hover_color="#218838", text_color="white", font=self.f_padrao, command=self.abrir_novo_pedido).pack(side="right")
 
-        # 2. CARDS DE KPI (Adicionados ícones focados em fluxo de pedidos)
+        # 2. CARDS DE KPI
         frm_kpi = ctk.CTkFrame(self.parent, fg_color="transparent")
         frm_kpi.pack(fill="x", padx=20, pady=10)
         
@@ -35,22 +36,28 @@ class PedidosTab:
 
         # 3. ÁREA DA TABELA (Container Branco)
         frm_lista = ctk.CTkFrame(self.parent, fg_color="white", corner_radius=10)
-        frm_lista.pack(fill="both", expand=True, padx=20, pady=10)
+        frm_lista.pack(fill="both", expand=True, padx=20, pady=20) # Margem inferior ajustada
 
-        # Pequena barra de pesquisa acima da tabela (Opcional, igual à imagem)
+        # Pequena barra de pesquisa acima da tabela
         frm_search = ctk.CTkFrame(frm_lista, fg_color="transparent")
         frm_search.pack(fill="x", padx=10, pady=10)
         ctk.CTkEntry(frm_search, placeholder_text="Pesquisar pedido...", width=250, fg_color="#f0f2f5", border_width=0).pack(side="left")
 
-        cols = ("id", "data", "requerente", "projeto", "status", "tech")
+        # TABELA (Seleção simples reposta)
+        cols = ("id", "data", "requerente", "projeto", "status", "tech", "material")
         self.tree_pedidos = ttk.Treeview(frm_lista, columns=cols, show="headings", style="Custom.Treeview")
-        for c in cols: 
-            self.tree_pedidos.heading(c, text=c.upper())
+        
+        cabecalhos = ["ID", "DATA", "REQUERENTE", "PROJETO", "STATUS", "TECH", "MATERIAL"]
+        for c, h in zip(cols, cabecalhos): 
+            self.tree_pedidos.heading(c, text=h)
             
         self.tree_pedidos.column("id", width=50, anchor="center")
-        self.tree_pedidos.column("data", width=120, anchor="center")
-        self.tree_pedidos.column("status", width=120, anchor="center")
+        self.tree_pedidos.column("data", width=100, anchor="center")
+        self.tree_pedidos.column("requerente", width=150, anchor="w")
+        self.tree_pedidos.column("projeto", width=150, anchor="w")
+        self.tree_pedidos.column("status", width=100, anchor="center")
         self.tree_pedidos.column("tech", width=80, anchor="center")
+        self.tree_pedidos.column("material", width=120, anchor="center")
 
         self.tree_pedidos.bind("<Double-1>", self.abrir_edicao)
 
@@ -62,10 +69,9 @@ class PedidosTab:
         self.configurar_estilo_tabela()
 
     def criar_card_kpi(self, parent, titulo, valor, col):
-        # Cartão branco com cantos arredondados
         card = ctk.CTkFrame(parent, fg_color="white", corner_radius=10, height=100)
         card.pack(side="left", fill="x", expand=True, padx=5)
-        card.pack_propagate(False) # Mantém a altura fixa
+        card.pack_propagate(False)
         
         ctk.CTkLabel(card, text=titulo, text_color="gray20", font=ctk.CTkFont(family="Arial", size=13, weight="bold")).pack(anchor="w", padx=15, pady=(15, 0))
         lbl_valor = ctk.CTkLabel(card, text=valor, text_color="#1f538d", font=ctk.CTkFont(size=32, weight="bold"))
@@ -74,7 +80,6 @@ class PedidosTab:
 
     def configurar_estilo_tabela(self):
         style = ttk.Style()
-        # Estilização para combinar com fundo claro
         style.theme_use("default")
         style.configure("Custom.Treeview", background="white", foreground="black", rowheight=30, fieldbackground="white", borderwidth=0)
         style.configure("Custom.Treeview.Heading", background="#f0f2f5", foreground="gray30", font=("Arial", 11, "bold"), borderwidth=0)
@@ -88,22 +93,21 @@ class PedidosTab:
         entregues = 0
         
         for p in pedidos:
-            status = p.get("status")
+            status = p.get("status", p.get("estado", "Pendente"))
             if status == "Em Andamento": andamento += 1
-            if status == "Entregue": entregues += 1
+            if status == "Entregue" or status == "Concluída": entregues += 1
             
             self.tree_pedidos.insert("", "end", values=(
-                p.get("id"), p.get("data_pedido"), p.get("requerente"), 
-                p.get("projeto"), status, p.get("tecnologia")
+                p.get("id", p.get("id_pedido")), p.get("data_pedido"), p.get("requerente_email", p.get("requerente")), 
+                p.get("nr_projeto", p.get("projeto")), status, p.get("tecnologia"), p.get("material")
             ))
             
-        # Atualiza os números dos cartões KPI
         self.lbl_kpi_total.configure(text=str(len(pedidos)))
         self.lbl_kpi_andamento.configure(text=str(andamento))
         self.lbl_kpi_entregues.configure(text=str(entregues))
 
     def abrir_novo_pedido(self):
-        JanelaNovoPedido(self.parent.winfo_toplevel(), self.atualizar_tabela, self.f_padrao, self.f_titulo)
+        JanelaNovoPedido(self.parent.winfo_toplevel(), self.atualizar_tabela)
 
     def abrir_edicao(self, event=None):
         sel = self.tree_pedidos.selection()
@@ -111,7 +115,6 @@ class PedidosTab:
         id_ped = self.tree_pedidos.item(sel[0])['values'][0]
         
         for p in PedidoService.obter_todos():
-            if p.get("id") == id_ped:
-                # Necessário garantir que o fundo do pop-up de edição também seja configurado depois
+            if p.get("id", p.get("id_pedido")) == id_ped:
                 JanelaEditarPedido(self.parent.winfo_toplevel(), p, self.atualizar_tabela)
                 break

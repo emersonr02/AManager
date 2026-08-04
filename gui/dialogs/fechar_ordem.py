@@ -64,7 +64,7 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         estado_atual = self.log_dados.get("estado", "Concluída")
         self.cmb_estado.set("Cancelada" if estado_atual == "Falha" else estado_atual)
 
-        # --- 4. CONTROLO DE QUALIDADE (Checks desmarcados) ---
+# --- 4. CONTROLO DE QUALIDADE (Lê o estado guardado no JSON) ---
         self.frm_qualidade = ctk.CTkFrame(self, fg_color="#f8f9fa", corner_radius=8, border_width=1, border_color="#e0e0e0")
         self.frm_qualidade.pack(fill="x", padx=30, pady=10)
         
@@ -73,9 +73,10 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         frm_checks = ctk.CTkFrame(self.frm_qualidade, fg_color="transparent")
         frm_checks.pack(fill="x", padx=10, pady=(0, 10))
 
-        self.chk_var_visual = tk.BooleanVar(value=False)
-        self.chk_var_dim = tk.BooleanVar(value=False)
-        self.chk_var_conf = tk.BooleanVar(value=False)
+        # CORREÇÃO: Agora puxa o estado gravado (True/False). Se não existir, nasce a False.
+        self.chk_var_visual = tk.BooleanVar(value=self.log_dados.get("inspecao_visual", False))
+        self.chk_var_dim = tk.BooleanVar(value=self.log_dados.get("controlo_dimensional", False))
+        self.chk_var_conf = tk.BooleanVar(value=self.log_dados.get("conformidade_peca", False))
 
         ctk.CTkCheckBox(frm_checks, text="Inspeção\nVisual", font=("Arial", 11), variable=self.chk_var_visual).pack(side="left", expand=True, padx=5)
         ctk.CTkCheckBox(frm_checks, text="Controlo\nDimensional", font=("Arial", 11), variable=self.chk_var_dim).pack(side="left", expand=True, padx=5)
@@ -86,7 +87,8 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         
         ctk.CTkLabel(self.frm_erro, text="Motivo do Cancelamento / Não Conformidade:", font=("Arial", 12, "bold"), text_color="#A12222").pack(anchor="w", pady=(5, 0))
         
-        tecnologia_peca = self.log_dados.get("tecnologia", "FDM")
+        # CORREÇÃO: Uso do .strip() para evitar erros de espaços em branco ("FDM " vs "FDM")
+        tecnologia_peca = str(self.log_dados.get("tecnologia", "FDM")).strip()
         motivos_lista = ["Erro Humano / Operador", "Queda de Energia", "Descolamento da Mesa (Genérico)"]
         motivos_lista.extend(NCService.obter_nc_por_tecnologia(tecnologia_peca))
         
@@ -99,11 +101,23 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         self.txt_acao.insert("1.0", "Selecione uma Não Conformidade (COD) acima para ver as instruções...")
         self.txt_acao.configure(state="disabled")
 
+        # CORREÇÃO: Força a Combobox a exibir o erro que estava guardado
+        erro_guardado = self.log_dados.get("erro", "")
+        if erro_guardado and erro_guardado in motivos_lista:
+            self.cmb_erro.set(erro_guardado)
+        elif motivos_lista:
+            self.cmb_erro.set(motivos_lista[0])
+
         # --- BOTÃO SALVAR ---
         self.btn_salvar = ctk.CTkButton(self, text="SALVAR APONTAMENTO E FECHAR", fg_color="#1f538d", hover_color="#143a63", text_color="white", font=("Arial", 13, "bold"), command=self.gravar_fecho, height=45)
         self.btn_salvar.pack(fill="x", padx=30, pady=20)
 
+        # Atualiza a visibilidade dos frames
         self.alternar_modo_estado()
+        
+        # CORREÇÃO: Se a ordem já estava "Cancelada", carrega automaticamente o texto da Ação Corretiva
+        if self.cmb_estado.get() == "Cancelada" and erro_guardado:
+            self.mostrar_acoes_corretivas(erro_guardado)
 
     def mascara_tempo(self, event):
         widget = event.widget

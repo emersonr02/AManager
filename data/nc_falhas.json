@@ -1,1 +1,23 @@
-[]
+[
+    { "cod": "COD001", "descricao": "Obstrução do bico de impressão", "categoria": "Equipamento", "tecnologia": "FDM", "impacto": "Defeitos dimensionais e de acabamento" },
+    { "cod": "COD002", "descricao": "Falha de adesão à mesa de impressão", "categoria": "Equipamento e/ou material", "tecnologia": "FDM", "impacto": "Defeitos dimensionais e de acabamento" },
+    { "cod": "COD003", "descricao": "Encolhimento ou deformação (warping)", "categoria": "Equipamento e/ou material", "tecnologia": "FDM", "impacto": "Defeitos dimensionais e de acabamento" },
+    { "cod": "COD004", "descricao": "Extrusão irregular", "categoria": "Equipamento e/ou material", "tecnologia": "FDM", "impacto": "Defeitos dimensionais e de acabamento" },
+    { "cod": "COD005", "descricao": "Filamentos soltos (stringing)", "categoria": "Equipamento e/ou material", "tecnologia": "FDM", "impacto": "Defeitos dimensionais e de acabamento" },
+    { "cod": "COD006", "descricao": "Buracos ou falhas nas camadas (layer gaps)", "categoria": "Equipamento e/ou material", "tecnologia": "FDM", "impacto": "Defeito estrutural" },
+    { "cod": "COD007", "descricao": "Falha no filamento (filamento partido ou gasto)", "categoria": "Equipamento e/ou material", "tecnologia": "FDM", "impacto": "Defeitos dimensionais e de acabamento" },
+    { "cod": "COD008", "descricao": "Camadas deslocadas (layer shifting)", "categoria": "Equipamento e/ou material", "tecnologia": "FDM", "impacto": "Defeitos dimensionais e de acabamento" },
+    { "cod": "COD009", "descricao": "Resfriamento inadequado", "categoria": "Equipamento e/ou material", "tecnologia": "FDM", "impacto": "Defeitos dimensionais e de acabamento" },
+    { "cod": "COD010", "descricao": "Resina mal curada", "categoria": "Equipamento e/ou material", "tecnologia": "SLA", "impacto": "Defeitos dimensionais e de acabamento" },
+    { "cod": "COD011", "descricao": "Falha na remoção do suporte", "categoria": "Processo", "tecnologia": "SLA", "impacto": "Defeitos dimensionais e de acabamento" },
+    { "cod": "COD012", "descricao": "Problemas no tanque de resina", "categoria": "Equipamento", "tecnologia": "SLA", "impacto": "Defeitos dimensionais e de acabamento" },
+    { "cod": "COD013", "descricao": "Temperatura inadequada de cura pós-impressão", "categoria": "Equipamento e/ou processo", "tecnologia": "SLA", "impacto": "Defeitos dimensionais e de acabamento" },
+    { "cod": "COD014", "descricao": "Resina contaminada", "categoria": "Processo e/ou material", "tecnologia": "SLA", "impacto": "Defeitos dimensionais e de acabamento" },
+    { "cod": "COD015", "descricao": "Configuração incorreta de exposição de camadas", "categoria": "Processo", "tecnologia": "SLA", "impacto": "Defeitos dimensionais e de acabamento" },
+    { "cod": "COD016", "descricao": "Distribuição irregular de pó", "categoria": "Equipamento e/ou processo", "tecnologia": "SLS", "impacto": "Defeitos dimensionais e de acabamento" },
+    { "cod": "COD017", "descricao": "Falta de fusão completa do pó", "categoria": "Equipamento", "tecnologia": "SLS", "impacto": "Defeitos dimensionais e de acabamento" },
+    { "cod": "COD018", "descricao": "Temperatura inadequada da câmara de impressão", "categoria": "Equipamento", "tecnologia": "SLS", "impacto": "Defeitos dimensionais e de acabamento" },
+    { "cod": "COD019", "descricao": "Problemas de resfriamento pós-impressão", "categoria": "Equipamento e/ou processo", "tecnologia": "SLS", "impacto": "Defeitos dimensionais e de acabamento" },
+    { "cod": "COD020", "descricao": "Contaminação do pó", "categoria": "Processo e/ou material", "tecnologia": "SLS", "impacto": "Defeitos dimensionais e de acabamento" },
+    { "cod": "COD021", "descricao": "Calibração inadequada da máquina", "categoria": "Processo", "tecnologia": "SLS", "impacto": "Defeitos dimensionais e de acabamento" }
+  ]

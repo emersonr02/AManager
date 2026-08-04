@@ -274,12 +274,38 @@ class HistoricoTab:
                 break
 
     def salvar_estado_final_ordem(self, log_atualizado):
+        # 1. Guarda a atualização na base de dados de Produção (Logs)
         logs = JSONManager.carregar(ARQUIVO_LOGS)
         for idx, log in enumerate(logs):
             if log.get("id") == log_atualizado["id"]:
                 logs[idx] = log_atualizado
                 break
         JSONManager.salvar(logs, ARQUIVO_LOGS)
+
+        # 2. RASTREABILIDADE BIDIRECIONAL (O FECHO DA SPRINT 5)
+        estado_final = log_atualizado.get("estado")
+        pedidos_vinc = log_atualizado.get("pedidos_vinculados", [])
+        
+        if pedidos_vinc:
+            from config.paths import ARQUIVO_PEDIDOS
+            pedidos_db = JSONManager.carregar(ARQUIVO_PEDIDOS)
+            mudou_pedido = False
+            
+            for p in pedidos_db:
+                if p.get("id", p.get("id_pedido")) in pedidos_vinc:
+                    if estado_final == "Concluída":
+                        p["status"] = "Entregue"
+                        p["estado"] = "Entregue"
+                    elif estado_final == "Cancelada":
+                        # Se falhou, volta para a fila de espera para ser refeito
+                        p["status"] = "Pendente"
+                        p["estado"] = "Pendente"
+                    mudou_pedido = True
+                    
+            if mudou_pedido:
+                JSONManager.salvar(pedidos_db, ARQUIVO_PEDIDOS)
+
+        # 3. Refresca a tabela do Histórico para refletir as mudanças
         self.atualizar_tabela()
 
     def remover_log(self):
