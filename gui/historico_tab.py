@@ -78,19 +78,21 @@ class HistoricoTab:
         frm_kpi = ctk.CTkFrame(self.parent, fg_color="transparent")
         frm_kpi.pack(fill="x", padx=24, pady=(4, 10))
 
-        self.lbl_kpi_total = self.criar_card_kpi(frm_kpi, "Produções Filtradas", "0", theme.TEXT)
-        self.lbl_kpi_taxa = self.criar_card_kpi(frm_kpi, "Taxa de Sucesso", "0.0%", theme.SUCCESS)
-        self.lbl_kpi_horas = self.criar_card_kpi(frm_kpi, "Total de Horas", "00:00", theme.TEAL)
+        self.lbl_kpi_total = theme.kpi_card(frm_kpi, "Produções Filtradas", "0")
+        self.lbl_kpi_taxa = theme.kpi_card(frm_kpi, "Taxa de Sucesso", "0.0%", theme.SUCCESS)
+        self.lbl_kpi_horas = theme.kpi_card(frm_kpi, "Total de Horas", "00:00", theme.TEAL)
 
         # 4. CONTAINER DA TABELA
         frm_conteudo = ctk.CTkFrame(self.parent, fg_color=theme.SURFACE, corner_radius=theme.RADIUS_M, border_width=1, border_color=theme.BORDER)
         frm_conteudo.pack(fill="both", expand=True, padx=24, pady=5)
 
         cols = ("id", "data", "projeto", "maquina", "material", "qnt", "tempo", "estado")
+        anchors = {"id": "center", "data": "center", "projeto": "w", "maquina": "w", "material": "w", "qnt": "center", "tempo": "center", "estado": "w"}
         self.tab_tree = ttk.Treeview(frm_conteudo, columns=cols, show="headings", style="Dashboard.Treeview")
-        for c in cols: 
-            self.tab_tree.heading(c, text=c.upper())
-        
+        for c in cols:
+            self.tab_tree.heading(c, text=c.upper(), anchor=anchors[c])
+
+
         self.tab_tree.column("id", width=50, anchor="center")
         self.tab_tree.column("data", width=90, anchor="center")
         self.tab_tree.column("projeto", width=200, anchor="w")
@@ -120,16 +122,6 @@ class HistoricoTab:
         theme.button_danger(frm_acoes, text="Apagar Registo", height=35, command=self.remover_log).pack(side="right", padx=5)
 
         self.configurar_estilo_tabela()
-
-    def criar_card_kpi(self, parent, titulo, valor, cor_destaque):
-        card = ctk.CTkFrame(parent, fg_color=theme.SURFACE, corner_radius=theme.RADIUS_M, border_width=1, border_color=theme.BORDER, height=84)
-        card.pack(side="left", fill="x", expand=True, padx=5)
-        card.pack_propagate(False)
-
-        ctk.CTkLabel(card, text=titulo.upper(), text_color=theme.TEAL, font=theme.font_eyebrow(10)).pack(anchor="w", padx=15, pady=(14, 0))
-        lbl_valor = ctk.CTkLabel(card, text=valor, text_color=cor_destaque, font=theme.font_mono(26, "bold"))
-        lbl_valor.pack(anchor="w", padx=15, pady=2)
-        return lbl_valor
 
     def configurar_estilo_tabela(self):
         style = ttk.Style()
