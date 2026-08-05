@@ -12,6 +12,35 @@ from services.projeto_service import ProjetoService
 from services.material_service import MaterialService
 from gui import theme
 
+# Modelo de email esperado por processar_texto_email — mantido em sincronia com
+# docs/modelo_pedido_email.md. Ver esse ficheiro para a explicação de cada campo.
+MODELO_EMAIL = """TAREFA: <descrição curta do que é pedido>
+PROJETO: <número - nome, tem de bater certo com um projeto já registado>
+RESPONSÁVEL: <nome de quem acompanha o projeto>
+REQUERENTE: <email de quem pede>
+LINK FICHEIROS: <caminho de rede ou link para os ficheiros>
+PRAZO DE ENTREGA: DD/MM/AAAA
+CRITÉRIOS DE ACEITAÇÃO: <tolerâncias, acabamento, etc.>
+OBSERVAÇÕES: Tecnologia: FDM|SLA|SLS; Material: <nome do material>; <notas livres>
+LISTA DE PEÇAS: <PN1>; <Material1>; <Qtd1> <PN2>; <Material2>; <Qtd2> ...
+
+Exemplo:
+
+TAREFA: Fabrico de peças para protótipo
+PROJETO: 257147 - PPS AquaFountain
+RESPONSÁVEL: Ana Moura
+REQUERENTE: joao.silva@ceiia.com
+LINK FICHEIROS: \\\\ceiia.com\\PPS\\AquaFountain
+PRAZO DE ENTREGA: 20/09/2026
+CRITÉRIOS DE ACEITAÇÃO: Tolerância dimensional ±0.2mm
+OBSERVAÇÕES: Tecnologia: FDM; Material: PETG Preto; Entregar em saco individual por peça.
+LISTA DE PEÇAS: AQF-001-Base; PETG Preto; 10 AQF-002-Tampa; PETG Preto; 5
+
+Notas: o Requerente nunca é lido automaticamente (escolha sempre manual).
+Tecnologia e Material ficam dentro de OBSERVAÇÕES, não são chaves de topo.
+LISTA DE PEÇAS usa só ";" como separador, nunca "|"."""
+
+
 class JanelaNovoPedido(ctk.CTkToplevel):
     def __init__(self, parent, callback_atualizar):
         super().__init__(parent)
@@ -100,12 +129,15 @@ class JanelaNovoPedido(ctk.CTkToplevel):
     def abrir_importacao_email(self):
         top_email = ctk.CTkToplevel(self)
         top_email.title("Importar Email")
-        top_email.geometry("500x400")
+        top_email.geometry("500x430")
         top_email.configure(fg_color=theme.BG)
         top_email.transient(self)
         top_email.grab_set()
 
-        ctk.CTkLabel(top_email, text="Cole aqui o texto do email:", font=theme.font_body(12, "bold"), text_color=theme.TEXT).pack(pady=(15, 5), padx=20, anchor="w")
+        frm_topo = ctk.CTkFrame(top_email, fg_color="transparent")
+        frm_topo.pack(fill="x", padx=20, pady=(15, 5))
+        ctk.CTkLabel(frm_topo, text="Cole aqui o texto do email:", font=theme.font_body(12, "bold"), text_color=theme.TEXT).pack(side="left")
+        theme.button_ghost(frm_topo, text="Ver Modelo", command=self.mostrar_modelo_email).pack(side="right")
 
         txt_email = ctk.CTkTextbox(top_email, width=460, height=250, fg_color=theme.SURFACE_ALT, text_color=theme.TEXT, border_color=theme.BORDER, border_width=1)
         txt_email.pack(padx=20, pady=5)
@@ -116,6 +148,24 @@ class JanelaNovoPedido(ctk.CTkToplevel):
             top_email.destroy()
 
         theme.button_primary(top_email, text="Processar Texto", command=processar_e_fechar).pack(pady=15)
+
+    def mostrar_modelo_email(self):
+        top_modelo = ctk.CTkToplevel(self)
+        top_modelo.title("Modelo de Email Esperado")
+        top_modelo.geometry("560x520")
+        top_modelo.configure(fg_color=theme.BG)
+        top_modelo.transient(self)
+        top_modelo.grab_set()
+
+        ctk.CTkLabel(top_modelo, text="Modelo de Email Esperado", font=theme.font_display(15), text_color=theme.ACCENT).pack(pady=(15, 5), padx=20, anchor="w")
+        ctk.CTkLabel(top_modelo, text="Copie e distribua a quem faz pedidos por email.", font=theme.font_body(11), text_color=theme.TEXT_MUTED).pack(padx=20, anchor="w")
+
+        txt_modelo = ctk.CTkTextbox(top_modelo, width=520, height=390, fg_color=theme.SURFACE_ALT, text_color=theme.TEXT, font=theme.font_mono(11), border_color=theme.BORDER, border_width=1)
+        txt_modelo.pack(padx=20, pady=10, fill="both", expand=True)
+        txt_modelo.insert("1.0", MODELO_EMAIL)
+        txt_modelo.configure(state="disabled")
+
+        theme.button_ghost(top_modelo, text="Fechar", command=top_modelo.destroy).pack(pady=(0, 15))
 
     def processar_texto_email(self, texto):
         """ Motor de leitura blindado contra texto esmagado e sem quebras de linha """
