@@ -54,10 +54,24 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         # 3. Lógica de Quantidades e SLS
         if self.tecnologia == "SLS":
             try:
-                altura = float(self.log.get("altura_cuba", 0))
-                perc_novo = float(self.log.get("percentagem_po_novo", 0))
-                fator_gramas_por_mm = 2.5 
-                consumo_estimado = altura * fator_gramas_por_mm * perc_novo
+                # Tratamento para aceitar tanto vírgula quanto ponto no input
+                altura_str = str(self.log.get("altura_cuba", 0)).replace(',', '.')
+                perc_str = str(self.log.get("percentagem_po_novo", 0)).replace(',', '.')
+                
+                altura = float(altura_str)
+                perc_novo = float(perc_str)
+                
+                # Se o operador digitar "30" em vez de "0.3", ajustamos matematicamente
+                if perc_novo > 1:
+                    perc_novo = perc_novo / 100
+                    
+                # Fórmula Oficial: =((((381*330*Altura)/1000000)*0.45)*%_Po_Novo)
+                # Onde 381x330 é a base, dividido por 1M dá o volume em Litros, e 0.45 é a densidade
+                consumo_estimado = ((((381 * 330 * altura) / 1000000) * 0.45) * perc_novo)
+                
+                # Atenção: Esta fórmula retorna o valor em Kg (Ex: 0.05). 
+                # Se o teu painel exibe e abate stock em Gramas (g), deves multiplicar o resultado por 1000.
+                # Exemplo: consumo_estimado = consumo_estimado * 1000
                 
                 self.qtd_est = f"{consumo_estimado:.2f} (Calc. SLS)"
                 self.qtd_raw = consumo_estimado
