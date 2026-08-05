@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import os
 
-from config.paths import ARQUIVO_LOGS, ARQUIVO_PEDIDOS
+from config.paths import ARQUIVO_PEDIDOS
 from database.json_manager import JSONManager
 from services.producao_service import ProducaoService
 from services.export_service import ExportService
@@ -131,7 +131,7 @@ class HistoricoTab:
         style.map("Dashboard.Treeview", background=[("selected", theme.ACCENT[0])], foreground=[("selected", "white")])
 
     def carregar_combos_filtro(self):
-        logs = JSONManager.carregar(ARQUIVO_LOGS) if os.path.exists(ARQUIVO_LOGS) else []
+        logs = ProducaoService.obter_todos()
         maquinas = ["Todas"] + sorted(list(set(l.get("maquina", "") for l in logs if l.get("maquina"))))
         self.flt_maq.configure(values=maquinas)
         self.flt_maq.set("Todas")
@@ -174,10 +174,9 @@ class HistoricoTab:
         pecas_finalizadas = 0
         total_horas = 0.0
 
-        logs = JSONManager.carregar(ARQUIVO_LOGS) if os.path.exists(ARQUIVO_LOGS) else []
+        logs = ProducaoService.obter_todos()
         pedidos_db = JSONManager.carregar(ARQUIVO_PEDIDOS) if os.path.exists(ARQUIVO_PEDIDOS) else []
-        
-        logs.sort(key=lambda x: int(x.get("id", 0)), reverse=True)
+
         pill_dados = {}
 
         for l in logs:
@@ -194,7 +193,6 @@ class HistoricoTab:
                         proj_str = f"{nr_proj} - {nome_proj}" if nome_proj else str(nr_proj)
                         if proj_str: projetos_set.add(proj_str)
 
-                        if p.get("material"): materiais_set.add(p["material"])
                         for peca in p.get("pecas", []):
                             if peca.get("material"): materiais_set.add(peca["material"])
 
@@ -285,34 +283,18 @@ class HistoricoTab:
         if not sel: return
         id_reg = ProducaoService.extrair_id(self.tab_tree.item(sel[0])['values'][0])
 
-
-        logs = JSONManager.carregar(ARQUIVO_LOGS)
-        for log in logs:
-            if log.get("id") == id_reg:
-                novo_log = log.copy()
-                novo_log["id"] = max([int(l.get("id", 0)) for l in logs]) + 1
-                novo_log["data_inicio"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                novo_log["estado"] = "Em Andamento"
-                novo_log["erro"] = ""
-                # Limpa dados reais na clonagem
-                novo_log.pop("tempo_real", None)
-                novo_log.pop("quantidade_real", None)
-                
-                logs.append(novo_log)
-                JSONManager.salvar(logs, ARQUIVO_LOGS)
-                self.carregar_combos_filtro()
-                self.atualizar_tabela()
-                messagebox.showinfo("Clonado", "Nova impressão registada com base na anterior.")
-                break
+        if ProducaoService.clonar_producao(id_reg):
+            self.carregar_combos_filtro()
+            self.atualizar_tabela()
+            messagebox.showinfo("Clonado", "Nova impressão registada com base na anterior.")
 
     def abrir_tratamento_ordem(self, event=None):
         sel = self.tab_tree.selection()
         if not sel: return
         id_reg = ProducaoService.extrair_id(self.tab_tree.item(sel[0])['values'][0])
-        for log in JSONManager.carregar(ARQUIVO_LOGS):
-            if log.get("id") == id_reg:
-                JanelaFecharOrdem(self.master_app, log, self.salvar_estado_final_ordem)
-                break
+        log = ProducaoService.obter_por_id(id_reg)
+        if log:
+            JanelaFecharOrdem(self.master_app, log, self.salvar_estado_final_ordem)
 
     def salvar_estado_final_ordem(self, log_atualizado):
         # Guarda a atualização na base de dados. O estado dos pedidos vinculados
@@ -320,13 +302,7 @@ class HistoricoTab:
         # produção associada, e o sistema não sabe (ainda) se as quantidades pedidas
         # já foram todas satisfeitas. Mudar o estado do pedido é feito manualmente
         # em Gestão de Pedidos.
-        logs = JSONManager.carregar(ARQUIVO_LOGS)
-        for idx, log in enumerate(logs):
-            if log.get("id") == log_atualizado.get("id"):
-                logs[idx] = log_atualizado
-                break
-        JSONManager.salvar(logs, ARQUIVO_LOGS)
-
+        ProducaoService.atualizar_producao(log_atualizado)
         self.atualizar_tabela()
 
     def remover_log(self):
@@ -334,7 +310,6 @@ class HistoricoTab:
         if not sel: return
         id_reg = ProducaoService.extrair_id(self.tab_tree.item(sel[0])['values'][0])
         if messagebox.askyesno("Aviso", "Remover do histórico local permanentemente?"):
-            logs = [l for l in JSONManager.carregar(ARQUIVO_LOGS) if l.get("id") != id_reg]
-            JSONManager.salvar(logs, ARQUIVO_LOGS)
+            ProducaoService.remover_producao(id_reg)
             self.carregar_combos_filtro()
             self.atualizar_tabela()

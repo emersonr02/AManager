@@ -5,7 +5,7 @@ import os
 from database.json_manager import JSONManager
 from services.pedido_service import PedidoService
 from services.producao_service import ProducaoService
-from config.paths import ARQUIVO_LOGS, ARQUIVO_PEDIDOS, ARQUIVO_MAQUINAS
+from config.paths import ARQUIVO_LOGS, ARQUIVO_MAQUINAS
 from gui import theme
 
 class ProducaoTab:
@@ -275,7 +275,6 @@ class ProducaoTab:
             mats = set()
             for peca in p.get("pecas", []):
                 if peca.get("material"): mats.add(peca.get("material"))
-            if not mats and p.get("material"): mats.add(p.get("material"))
             return list(mats)
 
         def reavaliar_bloqueio_materiais():
@@ -404,59 +403,35 @@ class ProducaoTab:
         # ==========================================
         # 3. GRAVAÇÃO DOS DADOS
         # ==========================================
-        from datetime import datetime
-        caminho_producoes = ARQUIVO_LOGS
-        caminho_pedidos = ARQUIVO_PEDIDOS
-
-        producoes = JSONManager.carregar(caminho_producoes) if os.path.exists(caminho_producoes) else []
-        
-        try:
-            novo_id = max([int(p.get("id", 0)) for p in producoes]) + 1 if producoes else 1
-        except (ValueError, TypeError):
-            novo_id = len(producoes) + 1
-
         # Vai buscar o utilizador com sessão iniciada no domínio (ex: "emerson.ribeiro"),
         # em vez de um valor genérico fixo — fica registado quem lançou a produção.
         responsavel = os.environ.get("USERNAME", "Desconhecido")
 
-        nova_producao = {
-            "id": novo_id,
-            "data_inicio": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "tecnologia": tech,
-            "maquina": maq,
-            "tempo_estimado": tempo,
-            "pedidos_vinculados": self.pedidos_vinculados,
-            "estado": "A Imprimir",
-            "operador": responsavel
-        }
-
-        if tech == "FDM":
-            nova_producao["quantidade_consumida"] = quant
-            nova_producao["checklist_seguranca"] = {k: v.get() for k, v in self.fdm_vars.items()}
-            
-        elif tech == "SLA":
-            nova_producao["quantidade_consumida"] = quant
-            nova_producao["checklist_seguranca"] = {k: v.get() for k, v in self.sla_vars.items()}
-            
+        campos_extra = {}
+        if tech in ("FDM", "SLA"):
+            campos_extra["quantidade_consumida"] = quant
+            checklist = self.fdm_vars if tech == "FDM" else self.sla_vars
+            campos_extra["checklist_seguranca"] = {k: v.get() for k, v in checklist.items()}
         elif tech == "SLS":
-            nova_producao["altura_cuba"] = altura
-            nova_producao["percentagem_po_novo"] = perc
-            nova_producao["lote_po"] = lote
-            nova_producao["checklist_seguranca"] = {k: v.get() for k, v in self.sls_vars.items()}
+            campos_extra["altura_cuba"] = altura
+            campos_extra["percentagem_po_novo"] = perc
+            campos_extra["lote_po"] = lote
+            campos_extra["checklist_seguranca"] = {k: v.get() for k, v in self.sls_vars.items()}
 
-        producoes.append(nova_producao)
-        JSONManager.salvar(producoes, caminho_producoes)
+        # Cria a produção e vincula-a aos pedidos sob os locks atómicos de cada
+        # serviço, para evitar tanto IDs duplicados como o link inverso
+        # (producoes_vinculadas) ficar por escrever.
+        nova_producao = ProducaoService.criar_producao(
+            tecnologia=tech,
+            maquina=maq,
+            tempo_estimado=tempo,
+            pedidos_vinculados=self.pedidos_vinculados,
+            operador=responsavel,
+            campos_extra=campos_extra,
+        )
+        novo_id = nova_producao["id"]
 
-        if os.path.exists(caminho_pedidos):
-            pedidos = JSONManager.carregar(caminho_pedidos)
-            modificado = False
-            for p in pedidos:
-                if p.get("id") in self.pedidos_vinculados:
-                    p["estado"] = "Em Andamento"
-                    modificado = True
-            
-            if modificado:
-                JSONManager.salvar(pedidos, caminho_pedidos)
+        PedidoService.vincular_producao(self.pedidos_vinculados, novo_id)
 
         messagebox.showinfo("Sucesso", f"Produção {ProducaoService.formatar_codigo(novo_id)} iniciada com sucesso na máquina {maq}!\n\nDados guardados em producao_i3D.json.")
         

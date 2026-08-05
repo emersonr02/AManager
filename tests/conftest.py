@@ -1,7 +1,7 @@
 import pytest
 
 from database import json_manager
-from services import pedido_service, maquina_service, nc_service, projeto_service, material_service
+from services import pedido_service, maquina_service, nc_service, projeto_service, material_service, producao_service
 
 
 @pytest.fixture
@@ -22,6 +22,13 @@ def arquivo_projetos(tmp_path, monkeypatch):
 def arquivo_materiais(tmp_path, monkeypatch):
     caminho = tmp_path / "materiais.json"
     monkeypatch.setattr(material_service, "ARQUIVO_MATERIAIS", str(caminho))
+    return str(caminho)
+
+
+@pytest.fixture
+def arquivo_producoes(tmp_path, monkeypatch):
+    caminho = tmp_path / "producao_i3D.json"
+    monkeypatch.setattr(producao_service, "ARQUIVO_LOGS", str(caminho))
     return str(caminho)
 
 
