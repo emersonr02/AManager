@@ -1,7 +1,9 @@
 import os
+import queue
+import threading
 import customtkinter as ctk
 from tkinter import ttk
-from config.paths import BASE_DIR
+from config.paths import BASE_DIR, DATA_DIR
 from gui import theme
 
 from gui.pedidos_tab import PedidosTab
@@ -87,7 +89,8 @@ class AppIndustrialI3D(ctk.CTk):
         frm_foot.grid(row=7, column=0, padx=16, pady=16, sticky="sw")
         self.lbl_status_dot = ctk.CTkLabel(frm_foot, text="●", text_color=theme.SUCCESS[0], font=theme.font_body(10))
         self.lbl_status_dot.pack(side="left")
-        ctk.CTkLabel(frm_foot, text=" Rede CEiiA · sincronizado", text_color=theme.SIDEBAR_TEXT_MUTED, font=theme.font_mono(9)).pack(side="left")
+        self.lbl_status_texto = ctk.CTkLabel(frm_foot, text=" Rede CEiiA · a verificar…", text_color=theme.SIDEBAR_TEXT_MUTED, font=theme.font_mono(9))
+        self.lbl_status_texto.pack(side="left")
 
         # --- ÁREA DE CONTEÚDO CENTRAL ---
         # Criamos um frame vazio (container) para cada tela
@@ -104,6 +107,11 @@ class AppIndustrialI3D(ctk.CTk):
 
         # Iniciar a aplicação mostrando o Dashboard
         self.selecionar_tela("dash")
+
+        # Verificação periódica de acesso à pasta de dados (rede)
+        self._fila_rede = queue.Queue()
+        self._processar_fila_rede()
+        self._agendar_verificacao_rede()
 
     def selecionar_tela(self, nome_tela):
         # 1. Oculta todos os frames principais
@@ -150,3 +158,49 @@ class AppIndustrialI3D(ctk.CTk):
             # quantidades) — alinhamento tabular ajuda a ler/comparar valores rapidamente.
             style.configure("Treeview", font=("Cascadia Mono", base - 1), rowheight=int(base * 2.2))
             style.configure("Treeview.Heading", font=("Segoe UI", int(base * 0.95), "bold"))
+
+    # --- ESTADO DA REDE (rodapé da sidebar) ---
+    # Nota de concorrência: Tkinter não é thread-safe — a thread de fundo nunca
+    # chama métodos do Tk (nem `self.after`); só faz I/O puro e põe o resultado
+    # numa queue.Queue (essa sim, segura entre threads). Quem lê a fila e mexe em
+    # widgets é sempre a thread principal, através do polling de `_processar_fila_rede`.
+    def _agendar_verificacao_rede(self):
+        """Testa o acesso à pasta de dados (potencialmente numa unidade de rede) numa
+        thread à parte, para uma rede lenta/em baixo nunca bloquear a interface."""
+        threading.Thread(target=self._testar_acesso_dados_bg, daemon=True).start()
+        self.after(15000, self._agendar_verificacao_rede)
+
+    def _testar_acesso_dados_bg(self):
+        ok = self._pasta_dados_acessivel()
+        self._fila_rede.put(ok)
+
+    def _processar_fila_rede(self):
+        try:
+            while True:
+                ok = self._fila_rede.get_nowait()
+                self._atualizar_indicador_rede(ok)
+        except queue.Empty:
+            pass
+        self.after(200, self._processar_fila_rede)
+
+    def _pasta_dados_acessivel(self):
+        """Confirma escrita real (não só que o caminho 'existe'), com um ficheiro
+        marcador próprio do processo para não colidir com outros postos na rede."""
+        marcador = os.path.join(DATA_DIR, f".rede_ok_{os.getpid()}")
+        try:
+            if not os.path.isdir(DATA_DIR):
+                return False
+            with open(marcador, "w") as f:
+                f.write("ok")
+            os.remove(marcador)
+            return True
+        except OSError:
+            return False
+
+    def _atualizar_indicador_rede(self, ok):
+        if ok:
+            self.lbl_status_dot.configure(text_color=theme.SUCCESS[0])
+            self.lbl_status_texto.configure(text=" Rede CEiiA · sincronizado")
+        else:
+            self.lbl_status_dot.configure(text_color=theme.CRITICAL[0])
+            self.lbl_status_texto.configure(text=" Rede CEiiA · sem acesso")
