@@ -2,6 +2,7 @@ import os
 import customtkinter as ctk
 from tkinter import ttk
 from config.paths import BASE_DIR
+from gui import theme
 
 from gui.pedidos_tab import PedidosTab
 from gui.producao_tab import ProducaoTab
@@ -9,21 +10,21 @@ from gui.historico_tab import HistoricoTab
 from gui.parque_tab import ParqueTab
 
 ctk.set_appearance_mode("light")
-# ctk.set_default_color_theme("blue")
 
 class AppIndustrialI3D(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Gestão de Produção i3D | CEiiA")
         self.geometry("1300x800")
-        
+        self.configure(fg_color=theme.BG)
+
         icon_path = os.path.join(BASE_DIR, "logo_ceiia.ico")
         if os.path.exists(icon_path):
             self.iconbitmap(icon_path)
 
         # Objetos de Fonte Dinâmica
-        self.f_padrao = ctk.CTkFont(family="Arial", size=13)
-        self.f_titulo = ctk.CTkFont(family="Arial", size=18, weight="bold")
+        self.f_padrao = theme.font_body(13)
+        self.f_titulo = theme.font_display(18)
         self.bind("<Configure>", self.redimensionar_fontes)
 
         # --- LAYOUT PRINCIPAL (GRID) ---
@@ -32,50 +33,61 @@ class AppIndustrialI3D(ctk.CTk):
         self.grid_columnconfigure(1, weight=1) # Apenas a coluna 1 (conteúdo) expande
 
         # --- MENU LATERAL (SIDEBAR) ---
-        self.sidebar_frame = ctk.CTkFrame(self, width=220, corner_radius=0, fg_color="#1f538d")
+        self.sidebar_frame = ctk.CTkFrame(self, width=220, corner_radius=0, fg_color=theme.ACCENT_STRONG)
         self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
         self.sidebar_frame.grid_rowconfigure(6, weight=1)
 
-        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="i3D MES", text_color="white", font=ctk.CTkFont(size=24, weight="bold"))
-        self.logo_label.grid(row=0, column=0, padx=20, pady=(30, 40))
+        frm_brand = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
+        frm_brand.grid(row=0, column=0, padx=20, pady=(28, 34), sticky="w")
+        ctk.CTkLabel(frm_brand, text="i3D", text_color="white", font=theme.font_display(22)).pack(side="left")
+        ctk.CTkLabel(frm_brand, text="  MES · CEiiA", text_color=theme.SIDEBAR_TEXT_MUTED, font=theme.font_mono(10)).pack(side="left")
 
         # --- CONFIGURAÇÃO DOS BOTÕES DO MENU LATERAL ---
-        
+
         # Estilo padrão para os botões de navegação normais
         config_btn_padrao = {
             "fg_color": "transparent",
-            "text_color": "white",
-            "hover_color": "#143a63",
+            "text_color": theme.SIDEBAR_TEXT,
+            "hover_color": theme.ACCENT_HOVER,
             "anchor": "w",
             "font": self.f_padrao,
-            "height": 40
+            "height": 38,
+            "corner_radius": theme.RADIUS_S,
         }
 
         # 1. Dashboard
-        self.btn_dash = ctk.CTkButton(self.sidebar_frame, text="  Dashboard", command=lambda: self.selecionar_tela("dash"), **config_btn_padrao)
-        self.btn_dash.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
+        self.btn_dash = ctk.CTkButton(self.sidebar_frame, text="📊  Dashboard", command=lambda: self.selecionar_tela("dash"), **config_btn_padrao)
+        self.btn_dash.grid(row=1, column=0, padx=10, pady=3, sticky="ew")
 
         # 2. Gestão de Pedidos
-        self.btn_pedidos = ctk.CTkButton(self.sidebar_frame, text="  Gestão de Pedidos", command=lambda: self.selecionar_tela("pedidos"), **config_btn_padrao)
-        self.btn_pedidos.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
+        self.btn_pedidos = ctk.CTkButton(self.sidebar_frame, text="📋  Gestão de Pedidos", command=lambda: self.selecionar_tela("pedidos"), **config_btn_padrao)
+        self.btn_pedidos.grid(row=2, column=0, padx=10, pady=3, sticky="ew")
 
         # 3. Impressoras
-        self.btn_parque = ctk.CTkButton(self.sidebar_frame, text="  Impressoras", command=lambda: self.selecionar_tela("parque"), **config_btn_padrao)
-        self.btn_parque.grid(row=3, column=0, padx=10, pady=5, sticky="ew")
+        self.btn_parque = ctk.CTkButton(self.sidebar_frame, text="🖨️  Impressoras", command=lambda: self.selecionar_tela("parque"), **config_btn_padrao)
+        self.btn_parque.grid(row=3, column=0, padx=10, pady=3, sticky="ew")
 
-        # 4. Nova Produção (Botão de Ação com Cor de Destaque - Verde Corporativo)
+        # 4. Nova Produção (Botão de Ação com Cor de Destaque)
         self.btn_producao = ctk.CTkButton(
-            self.sidebar_frame, 
-            text="  + Nova Produção", 
+            self.sidebar_frame,
+            text="➕  Nova Produção",
             command=lambda: self.selecionar_tela("producao"),
-            fg_color="#28a745",          # Cor verde de destaque
+            fg_color=theme.TEAL,
             text_color="white",
-            hover_color="#218838",       # Verde mais escuro no hover
+            hover_color=theme.TEAL_HOVER,
             anchor="w",
-            font=self.f_padrao,
-            height=40
+            font=theme.font_body(13, "bold"),
+            height=38,
+            corner_radius=theme.RADIUS_S,
         )
-        self.btn_producao.grid(row=4, column=0, padx=10, pady=(20, 5), sticky="ew") # Espaçamento extra acima para isolar o botão de ação
+        self.btn_producao.grid(row=4, column=0, padx=10, pady=(18, 3), sticky="ew") # Espaçamento extra acima para isolar o botão de ação
+
+        # --- RODAPÉ: ESTADO DA REDE ---
+        frm_foot = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
+        frm_foot.grid(row=7, column=0, padx=16, pady=16, sticky="sw")
+        self.lbl_status_dot = ctk.CTkLabel(frm_foot, text="●", text_color=theme.SUCCESS[0], font=theme.font_body(10))
+        self.lbl_status_dot.pack(side="left")
+        ctk.CTkLabel(frm_foot, text=" Rede CEiiA · sincronizado", text_color=theme.SIDEBAR_TEXT_MUTED, font=theme.font_mono(9)).pack(side="left")
 
         # --- ÁREA DE CONTEÚDO CENTRAL ---
         # Criamos um frame vazio (container) para cada tela
@@ -105,12 +117,12 @@ class AppIndustrialI3D(ctk.CTk):
         self.btn_dash.configure(**cor_padrao)
         self.btn_pedidos.configure(**cor_padrao)
         self.btn_parque.configure(**cor_padrao)
-        
-        # Reseta o botão de Nova Produção para o verde original dele
-        self.btn_producao.configure(fg_color="#28a745")
+
+        # Reseta o botão de Nova Produção para a cor original dele
+        self.btn_producao.configure(fg_color=theme.TEAL)
 
         # 3. Exibe o frame selecionado e altera o estado visual do botão ativo
-        cor_ativo = {"fg_color": "#143a63"} # Azul escuro para os normais
+        cor_ativo = {"fg_color": theme.ACCENT_HOVER}
 
         if nome_tela == "dash":
             self.frame_dash.grid(row=0, column=1, sticky="nsew")
@@ -123,8 +135,8 @@ class AppIndustrialI3D(ctk.CTk):
             self.btn_parque.configure(**cor_ativo)
         elif nome_tela == "producao":
             self.frame_producao.grid(row=0, column=1, sticky="nsew")
-            # Quando estiver na tela de produção, o botão ganha um destaque de seleção diferente (ou mantém o verde escuro de hover)
-            self.btn_producao.configure(fg_color="#143a63")
+            # Quando estiver na tela de produção, o botão ganha um destaque de seleção diferente
+            self.btn_producao.configure(fg_color=theme.TEAL_HOVER)
 
     def redimensionar_fontes(self, event):
         if event.widget == self:
@@ -134,5 +146,7 @@ class AppIndustrialI3D(ctk.CTk):
             self.f_titulo.configure(size=int(base * 1.3))
             
             style = ttk.Style()
-            style.configure("Treeview", font=("Arial", base), rowheight=int(base * 2.2))
-            style.configure("Treeview.Heading", font=("Arial", int(base * 1.1), "bold"))
+            # Corpo em monoespaçada: as tabelas são sobretudo dados (IDs, datas, tempos,
+            # quantidades) — alinhamento tabular ajuda a ler/comparar valores rapidamente.
+            style.configure("Treeview", font=("Cascadia Mono", base - 1), rowheight=int(base * 2.2))
+            style.configure("Treeview.Heading", font=("Segoe UI", int(base * 0.95), "bold"))
