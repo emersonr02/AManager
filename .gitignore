@@ -1,1 +1,3 @@
-data/*.json
+data/producao_i3D.json
+data/pedidos.json
+data/projetos.json
