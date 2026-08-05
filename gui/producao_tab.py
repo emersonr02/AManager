@@ -66,14 +66,46 @@ class ProducaoTab:
         self.lbl_perc = ctk.CTkLabel(frm, text="% de Pó Novo:", font=self.f_padrao, text_color="gray30")
         self.ent_perc = ctk.CTkEntry(frm, placeholder_text="0.3", font=self.f_padrao, fg_color="white", border_color="gray80", text_color="black", width=250)
 
-        # --- BLOCO EXCLUSIVO SLS ---
+        # ====================================================
+        # --- BLOCOS DE CHECKLISTS POR TECNOLOGIA ---
+        # ====================================================
+
+        # 1. BLOCO EXCLUSIVO FDM
+        self.frm_fdm_checklist = ctk.CTkFrame(frm, fg_color="#f8f9fa", corner_radius=10, border_width=1, border_color="#e0e0e0")
+        ctk.CTkLabel(self.frm_fdm_checklist, text="⚙️ Checklist Crítico FDM", font=("Arial", 12, "bold"), text_color="#1f538d").grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(10, 5))
+        
+        self.fdm_vars = {
+            "nivelamento_mesa": tk.BooleanVar(value=False), 
+            "analise_gcode": tk.BooleanVar(value=False), 
+            "qualidade_filamento": tk.BooleanVar(value=False)
+        }
+        
+        ctk.CTkCheckBox(self.frm_fdm_checklist, text="NIVELAMENTO DA MESA", font=("Arial", 11), variable=self.fdm_vars["nivelamento_mesa"]).grid(row=1, column=0, padx=15, pady=10, sticky="w")
+        ctk.CTkCheckBox(self.frm_fdm_checklist, text="ANÁLISE GCODE", font=("Arial", 11), variable=self.fdm_vars["analise_gcode"]).grid(row=1, column=1, padx=15, pady=10, sticky="w")
+        ctk.CTkCheckBox(self.frm_fdm_checklist, text="QUALIDADE DO FILAMENTO", font=("Arial", 11), variable=self.fdm_vars["qualidade_filamento"]).grid(row=1, column=2, padx=15, pady=10, sticky="w")
+
+        # 2. BLOCO EXCLUSIVO SLA
+        self.frm_sla_checklist = ctk.CTkFrame(frm, fg_color="#f8f9fa", corner_radius=10, border_width=1, border_color="#e0e0e0")
+        ctk.CTkLabel(self.frm_sla_checklist, text="⚙️ Checklist Crítico SLA", font=("Arial", 12, "bold"), text_color="#1f538d").grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(10, 5))
+        
+        self.sla_vars = {
+            "limpeza_tanque": tk.BooleanVar(value=False), 
+            "limpeza_mesa": tk.BooleanVar(value=False), 
+            "qualidade_resina": tk.BooleanVar(value=False)
+        }
+        
+        ctk.CTkCheckBox(self.frm_sla_checklist, text="LIMPEZA DO TANQUE", font=("Arial", 11), variable=self.sla_vars["limpeza_tanque"]).grid(row=1, column=0, padx=15, pady=10, sticky="w")
+        ctk.CTkCheckBox(self.frm_sla_checklist, text="LIMPEZA DA MESA", font=("Arial", 11), variable=self.sla_vars["limpeza_mesa"]).grid(row=1, column=1, padx=15, pady=10, sticky="w")
+        ctk.CTkCheckBox(self.frm_sla_checklist, text="QUALIDADE DA RESINA", font=("Arial", 11), variable=self.sla_vars["qualidade_resina"]).grid(row=1, column=2, padx=15, pady=10, sticky="w")
+
+        # 3. BLOCO EXCLUSIVO SLS
         self.frm_sls_checklist = ctk.CTkFrame(frm, fg_color="#f8f9fa", corner_radius=10, border_width=1, border_color="#e0e0e0")
         ctk.CTkLabel(self.frm_sls_checklist, text="⚙️ Parâmetros Básicos e Checklist Crítico SLS", font=("Arial", 12, "bold"), text_color="#1f538d").grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(10, 5))
 
         self.chk_var_lote = tk.BooleanVar(value=False)
         self.chk_lote = ctk.CTkCheckBox(self.frm_sls_checklist, text="Mesmo lote da produção anterior?", font=("Arial", 11, "bold"), variable=self.chk_var_lote, command=self.preencher_lote_anterior)
         self.chk_lote.grid(row=1, column=0, columnspan=3, padx=15, pady=(5, 10), sticky="w") 
-        
+
         ctk.CTkLabel(self.frm_sls_checklist, text="Lote do Pó:", font=self.f_padrao, text_color="gray30").grid(row=2, column=0, padx=15, pady=5, sticky="w")
         self.ent_lote = ctk.CTkEntry(self.frm_sls_checklist, width=200, fg_color="white", border_color="gray80", text_color="black")
         self.ent_lote.grid(row=2, column=1, columnspan=2, padx=5, pady=5, sticky="w")
@@ -84,20 +116,38 @@ class ProducaoTab:
             "chiller": tk.BooleanVar(value=False), "ac": tk.BooleanVar(value=False), "pre_aquecimento": tk.BooleanVar(value=False)
         }
 
-        checks_config = [
+        checks_config_sls = [
             ("SliceFix OK", "slicefix", 3, 0), ("Quant. de pó suficiente", "po_suficiente", 3, 1), ("Abastecim/ de pó ligado", "abastecimento", 3, 2),
             ("Homing do Pistão", "home_pistao", 4, 0), ("Homing da Rolo", "home_rolo", 4, 1), ("Z adicional no topo", "z_adicional", 4, 2),
             ("Chiller ligado", "chiller", 5, 0), ("AC ligado", "ac", 5, 1), ("Pre-aquecimento", "pre_aquecimento", 5, 2)
         ]
 
-        for text, key, row, col in checks_config:
+        for text, key, row, col in checks_config_sls:
             ctk.CTkCheckBox(self.frm_sls_checklist, text=text, font=("Arial", 11), variable=self.sls_vars[key]).grid(row=row, column=col, padx=15, pady=6, sticky="w")
 
         # Botão Guardar
         self.btn_salvar = ctk.CTkButton(frm, text="🚀 INICIAR FABRICO", fg_color="#28a745", hover_color="#218838", height=45, font=self.f_titulo, command=self.gravar_producao)
 
+    def preencher_lote_anterior(self):
+        if self.chk_var_lote.get():
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            caminho_producoes = os.path.join(base_dir, "data", "producao_i3D.json")
+            
+            if os.path.exists(caminho_producoes):
+                producoes = JSONManager.carregar(caminho_producoes)
+                lotes_sls = [p.get("lote_po") for p in producoes if p.get("tecnologia") == "SLS" and p.get("lote_po")]
+                
+                if lotes_sls:
+                    self.ent_lote.delete(0, 'end')
+                    self.ent_lote.insert(0, lotes_sls[-1])
+                    return
+            
+            self.chk_var_lote.set(False)
+            messagebox.showinfo("Info", "Nenhum registo de lote de pó anterior encontrado.")
+        else:
+            self.ent_lote.delete(0, 'end')
+
     def ao_mudar_tecnologia(self, escolha=None):
-        """ Gere a visibilidade dos campos e recarrega máquinas e pedidos """
         tech_atual = self.cmb_tech.get()
 
         # 1. Reset dos pedidos vinculados
@@ -114,14 +164,24 @@ class ProducaoTab:
         self.ent_altura.grid_forget()
         self.lbl_perc.grid_forget()
         self.ent_perc.grid_forget()
+        self.frm_fdm_checklist.grid_forget()
+        self.frm_sla_checklist.grid_forget()
         self.frm_sls_checklist.grid_forget()
         self.btn_salvar.grid_forget()
 
         # 3. Mostra consoante a tecnologia
-        if tech_atual in ["FDM", "SLA"]:
+        if tech_atual == "FDM":
             self.lbl_quant.grid(row=4, column=0, padx=15, pady=10, sticky="e")
             self.ent_quant.grid(row=4, column=1, padx=15, pady=10, sticky="w")
-            self.btn_salvar.grid(row=5, column=0, columnspan=3, padx=15, pady=20, sticky="ew")
+            self.frm_fdm_checklist.grid(row=5, column=0, columnspan=3, padx=15, pady=10, sticky="ew")
+            self.btn_salvar.grid(row=6, column=0, columnspan=3, padx=15, pady=20, sticky="ew")
+            
+        elif tech_atual == "SLA":
+            self.lbl_quant.grid(row=4, column=0, padx=15, pady=10, sticky="e")
+            self.ent_quant.grid(row=4, column=1, padx=15, pady=10, sticky="w")
+            self.frm_sla_checklist.grid(row=5, column=0, columnspan=3, padx=15, pady=10, sticky="ew")
+            self.btn_salvar.grid(row=6, column=0, columnspan=3, padx=15, pady=20, sticky="ew")
+            
         elif tech_atual == "SLS":
             self.lbl_altura.grid(row=4, column=0, padx=15, pady=10, sticky="e")
             self.ent_altura.grid(row=4, column=1, padx=15, pady=10, sticky="w")
@@ -134,15 +194,10 @@ class ProducaoTab:
         self.atualizar_combos()
 
     def atualizar_combos(self):
-        """ Carrega máquinas de forma segura a partir de parque_maquinas.json """
         if not hasattr(self, 'cmb_maq'): return
         
         tech_atual = self.cmb_tech.get()
-        
-        # Constrói o caminho absoluto para a tua pasta 'data'
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        
-        # Agora aponta diretamente para o ficheiro correto!
         caminho_final = os.path.join(base_dir, "data", "parque_maquinas.json")
             
         if not os.path.exists(caminho_final):
@@ -156,7 +211,6 @@ class ProducaoTab:
             
             for imp in impressoras:
                 if isinstance(imp, dict):
-                    # Tenta ler do dicionário
                     t = imp.get("tecnologia", imp.get("tech", tech_atual)) 
                     nome = imp.get("nome", imp.get("modelo", "Desconhecida"))
                     st = imp.get("status", imp.get("estado", "Ativa"))
@@ -164,7 +218,6 @@ class ProducaoTab:
                     if t == tech_atual and st not in ["Inativa", "Manutenção"]:
                         maquinas_compativeis.append(nome)
                 elif isinstance(imp, str):
-                    # Se for só uma string simples
                     maquinas_compativeis.append(imp)
 
             if maquinas_compativeis:
@@ -277,7 +330,7 @@ class ProducaoTab:
             entry.insert(0, formatted)
 
     def gravar_producao(self):
-        # 1. VALIDAÇÕES
+        # 1. VALIDAÇÕES BÁSICAS
         if not self.pedidos_vinculados:
             messagebox.showwarning("Aviso", "Por favor, vincule pelo menos um pedido à produção.")
             return
@@ -294,19 +347,55 @@ class ProducaoTab:
             messagebox.showwarning("Aviso", "Selecione uma máquina válida antes de iniciar o fabrico.")
             return
 
+        # ==========================================
+        # 2. SAFETY LOCKS (TRAVAS DE SEGURANÇA)
+        # ==========================================
+        if tech == "FDM":
+            quant = self.ent_quant.get().strip()
+            if not quant:
+                messagebox.showwarning("Aviso", "Bloqueio: A Quantidade de material (g) é obrigatória.")
+                return
+            
+            # Verifica se TODOS os checks estão marcados
+            if not all(var.get() for var in self.fdm_vars.values()):
+                messagebox.showwarning("Erro de Qualidade", "Bloqueio: É obrigatório validar todos os itens da Checklist Crítica FDM para iniciar a produção.")
+                return
+
+        elif tech == "SLA":
+            quant = self.ent_quant.get().strip()
+            if not quant:
+                messagebox.showwarning("Aviso", "Bloqueio: A Quantidade de resina (ml) é obrigatória.")
+                return
+            
+            # Verifica se TODOS os checks estão marcados
+            if not all(var.get() for var in self.sla_vars.values()):
+                messagebox.showwarning("Erro de Qualidade", "Bloqueio: É obrigatório validar todos os itens da Checklist Crítica SLA para iniciar a produção.")
+                return
+
+        elif tech == "SLS":
+            altura = self.ent_altura.get().strip()
+            perc = self.ent_perc.get().strip()
+            lote = self.ent_lote.get().strip()
+            
+            if not altura or not perc or not lote:
+                messagebox.showwarning("Aviso", "Bloqueio: A Altura da Cuba, % de Pó Novo e Lote do Pó são obrigatórios.")
+                return
+            
+            # Verifica se TODOS os checks estão marcados
+            if not all(var.get() for var in self.sls_vars.values()):
+                messagebox.showwarning("Erro de Qualidade", "Bloqueio: É obrigatório validar todos os parâmetros e Checklist Crítica SLS para iniciar a produção.")
+                return
+
+        # ==========================================
+        # 3. GRAVAÇÃO DOS DADOS
+        # ==========================================
         from datetime import datetime
-        import os
-        from database.json_manager import JSONManager
-        
-        # 2. CAMINHOS DOS FICHEIROS EXATOS (Baseados no repositório)
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        caminho_producoes = os.path.join(base_dir, "data", "producao_i3D.json") # O ficheiro correto!
+        caminho_producoes = os.path.join(base_dir, "data", "producao_i3D.json")
         caminho_pedidos = os.path.join(base_dir, "data", "pedidos.json")
 
-        # 3. GUARDAR A PRODUÇÃO NO FICHEIRO producao_i3D.json
         producoes = JSONManager.carregar(caminho_producoes) if os.path.exists(caminho_producoes) else []
         
-        # Procura o último ID (trata casos onde o ID pode ser string ou int)
         try:
             novo_id = max([int(p.get("id", p.get("id_producao", 0))) for p in producoes]) + 1 if producoes else 1
         except (ValueError, TypeError):
@@ -323,21 +412,23 @@ class ProducaoTab:
             "operador": "CEiiA/i3D" 
         }
 
-        # Guardar parâmetros específicos da tecnologia
-        if tech in ["FDM", "SLA"]:
-            if hasattr(self, 'ent_quant'):
-                nova_producao["quantidade_consumida"] = self.ent_quant.get().strip()
+        if tech == "FDM":
+            nova_producao["quantidade_consumida"] = quant
+            nova_producao["checklist_seguranca"] = {k: v.get() for k, v in self.fdm_vars.items()}
+            
+        elif tech == "SLA":
+            nova_producao["quantidade_consumida"] = quant
+            nova_producao["checklist_seguranca"] = {k: v.get() for k, v in self.sla_vars.items()}
+            
         elif tech == "SLS":
-            if hasattr(self, 'ent_altura'):
-                nova_producao["altura_cuba"] = self.ent_altura.get().strip()
-                nova_producao["percentagem_po_novo"] = self.ent_perc.get().strip()
-                nova_producao["lote_po"] = self.ent_lote.get().strip()
-                nova_producao["checklist_seguranca"] = {k: v.get() for k, v in self.sls_vars.items()}
+            nova_producao["altura_cuba"] = altura
+            nova_producao["percentagem_po_novo"] = perc
+            nova_producao["lote_po"] = lote
+            nova_producao["checklist_seguranca"] = {k: v.get() for k, v in self.sls_vars.items()}
 
         producoes.append(nova_producao)
         JSONManager.salvar(producoes, caminho_producoes)
 
-        # 4. ATUALIZAR OS PEDIDOS PARA "Em Andamento"
         if os.path.exists(caminho_pedidos):
             pedidos = JSONManager.carregar(caminho_pedidos)
             modificado = False
@@ -353,37 +444,14 @@ class ProducaoTab:
 
         messagebox.showinfo("Sucesso", f"Produção #{novo_id} iniciada com sucesso na máquina {maq}!\n\nDados guardados em producao_i3D.json.")
         
-        # 5. LIMPAR O FORMULÁRIO
         self.ao_mudar_tecnologia(tech)
         self.ent_tempo.delete(0, 'end')
         if hasattr(self, 'ent_quant'): self.ent_quant.delete(0, 'end')
         if hasattr(self, 'ent_altura'): self.ent_altura.delete(0, 'end')
         if hasattr(self, 'ent_perc'): self.ent_perc.delete(0, 'end')
         if hasattr(self, 'ent_lote'): self.ent_lote.delete(0, 'end')
-
-    def preencher_lote_anterior(self):
-        """ Vai buscar o último lote de SLS registado no producao_i3D.json """
-        if self.chk_var_lote.get():
-            import os
-            from database.json_manager import JSONManager
-            
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            caminho_producoes = os.path.join(base_dir, "data", "producao_i3D.json")
-            
-            if os.path.exists(caminho_producoes):
-                producoes = JSONManager.carregar(caminho_producoes)
-                # Filtra apenas produções SLS que tenham um lote preenchido
-                lotes_sls = [p.get("lote_po") for p in producoes if p.get("tecnologia") == "SLS" and p.get("lote_po")]
-                
-                if lotes_sls:
-                    ultimo_lote = lotes_sls[-1] # O último da lista
-                    self.ent_lote.delete(0, 'end')
-                    self.ent_lote.insert(0, ultimo_lote)
-                    return
-            
-            # Se falhar ou não encontrar histórico
-            self.chk_var_lote.set(False)
-            messagebox.showinfo("Info", "Nenhum registo de lote de pó anterior encontrado.")
-        else:
-            # Limpa o campo se o utilizador desmarcar a caixa
-            self.ent_lote.delete(0, 'end')
+        
+        for chk_var in self.fdm_vars.values(): chk_var.set(False)
+        for chk_var in self.sla_vars.values(): chk_var.set(False)
+        for chk_var in self.sls_vars.values(): chk_var.set(False)
+        self.chk_var_lote.set(False)

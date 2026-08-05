@@ -4,12 +4,12 @@ import sys
 def get_base_path():
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # Sobe um nível para a raiz
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__))) 
 
 BASE_DIR = get_base_path()
 DATA_DIR = os.path.join(BASE_DIR, "data")
 
-# Garantir que a pasta data existe
+
 os.makedirs(DATA_DIR, exist_ok=True)
 
 ARQUIVO_LOGS = os.path.join(DATA_DIR, "producao_i3D.json")
@@ -19,4 +19,4 @@ ARQUIVO_MATERIAIS = os.path.join(DATA_DIR, "materiais.json")
 ARQUIVO_PEDIDOS = "data/pedidos.json"
 ARQUIVO_NC_FALHAS = "data/nc_falhas.json"
 ARQUIVO_ACOES = "data/acoes_corretivas.json"
-ARQUIVO_IMPRESSORAS = os.path.join(DATA_DIR, "impressoras.json") # ou o nome do ficheiro json que usas
+ARQUIVO_IMPRESSORAS = os.path.join(DATA_DIR, "impressoras.json") 
