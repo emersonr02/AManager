@@ -109,20 +109,18 @@ def pill(parent, text, variant="neutral"):
     )
 
 
-def kpi_card(parent, label, value, caption="", value_variant=None):
-    """Cartão de indicador (KPI): rótulo pequeno + valor grande em monoespaçada + legenda."""
-    value_color = {"warn": WARNING, "bad": CRITICAL}.get(value_variant, TEXT)
+def kpi_card(parent, label, value="0", value_color=None):
+    """Cartão de indicador (KPI): rótulo pequeno + valor grande em monoespaçada.
+    Devolve o CTkLabel do valor, para o chamador atualizar o texto depois
+    (`.configure(text=...)`) sem reconstruir o cartão."""
+    card = ctk.CTkFrame(parent, fg_color=SURFACE, corner_radius=RADIUS_M, border_width=1, border_color=BORDER, height=84)
+    card.pack(side="left", fill="x", expand=True, padx=5)
+    card.pack_propagate(False)
 
-    card = ctk.CTkFrame(parent, fg_color=SURFACE, border_width=1, border_color=BORDER, corner_radius=RADIUS_M)
-    inner = ctk.CTkFrame(card, fg_color="transparent")
-    inner.pack(fill="both", expand=True, padx=14, pady=12)
-
-    ctk.CTkLabel(inner, text=label.upper(), font=font_eyebrow(10), text_color=TEAL, anchor="w").pack(fill="x")
-    ctk.CTkLabel(inner, text=str(value), font=font_mono(26, "bold"), text_color=value_color, anchor="w").pack(fill="x", pady=(4, 0))
-    if caption:
-        ctk.CTkLabel(inner, text=caption, font=font_body(11), text_color=TEXT_MUTED, anchor="w").pack(fill="x")
-
-    return card
+    ctk.CTkLabel(card, text=label.upper(), text_color=TEAL, font=font_eyebrow(10), anchor="w").pack(anchor="w", padx=15, pady=(14, 0))
+    lbl_valor = ctk.CTkLabel(card, text=value, text_color=value_color or TEXT, font=font_mono(26, "bold"), anchor="w")
+    lbl_valor.pack(anchor="w", padx=15, pady=2)
+    return lbl_valor
 
 
 def entry(parent, **kwargs):
