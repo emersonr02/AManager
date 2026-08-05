@@ -1,9 +1,27 @@
+import re
 from datetime import datetime
 from database.json_manager import JSONManager
 from config.paths import ARQUIVO_PEDIDOS
 
 class PedidoService:
-    
+
+    @staticmethod
+    def formatar_codigo(id_pedido) -> str:
+        """Código profissional para mostrar ao utilizador (ex: PED000007).
+        O id interno (inteiro, usado em todas as ligações/joins) não muda."""
+        try:
+            return f"PED{int(id_pedido):06d}"
+        except (TypeError, ValueError):
+            return str(id_pedido)
+
+    @staticmethod
+    def extrair_id(codigo):
+        """Inverso de formatar_codigo — aceita 'PED000007', '7' ou já um int."""
+        if isinstance(codigo, int):
+            return codigo
+        digitos = re.sub(r"\D", "", str(codigo))
+        return int(digitos) if digitos else None
+
     @staticmethod
     def obter_todos():
         """Retorna todos os pedidos ordenados do mais recente para o mais antigo."""

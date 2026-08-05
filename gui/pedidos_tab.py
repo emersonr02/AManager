@@ -4,6 +4,7 @@ from tkinter import ttk, messagebox
 import os
 from database.json_manager import JSONManager
 from config.paths import ARQUIVO_PEDIDOS
+from services.pedido_service import PedidoService
 from gui.dialogs.novo_pedido import JanelaNovoPedido
 from gui.dialogs.editar_pedido import JanelaEditarPedido
 from gui.dialogs.gestao_projetos_materiais import JanelaGestaoProjetosMateriais
@@ -59,7 +60,7 @@ class PedidosTab:
         for c, h in zip(cols, cabecalhos):
             self.tree_pedidos.heading(c, text=h, anchor=anchors[c])
 
-        self.tree_pedidos.column("id", width=50, anchor="center")
+        self.tree_pedidos.column("id", width=95, anchor="center")
         self.tree_pedidos.column("data", width=90, anchor="center")
         self.tree_pedidos.column("requerente", width=180, anchor="w")
         self.tree_pedidos.column("projeto", width=220, anchor="w")
@@ -109,7 +110,7 @@ class PedidosTab:
             if status in ["Entregue", "Concluído"]: entregues += 1
 
             item_id = self.tree_pedidos.insert("", "end", values=(
-                p.get("id"), p.get("data_pedido"), p.get("requerente_email"),
+                PedidoService.formatar_codigo(p.get("id")), p.get("data_pedido"), p.get("requerente_email"),
                 p.get("nr_projeto"), status, p.get("tecnologia")
             ))
             pill_dados[item_id] = (status, _VARIANTE_ESTADO.get(status, "neutral"))
@@ -139,8 +140,8 @@ class PedidosTab:
     def abrir_edicao(self, event=None):
         sel = self.tree_pedidos.selection()
         if not sel: return
-        id_ped = self.tree_pedidos.item(sel[0])['values'][0]
-        
+        id_ped = PedidoService.extrair_id(self.tree_pedidos.item(sel[0])['values'][0])
+
         pedidos = JSONManager.carregar(ARQUIVO_PEDIDOS)
         for p in pedidos:
             if p.get("id") == id_ped:
@@ -150,11 +151,12 @@ class PedidosTab:
     def abrir_dialogo_estado(self):
         sel = self.tree_pedidos.selection()
         if not sel: return
-        id_ped = self.tree_pedidos.item(sel[0])['values'][0]
+        codigo = self.tree_pedidos.item(sel[0])['values'][0]
+        id_ped = PedidoService.extrair_id(codigo)
         status_atual = self.tree_pedidos.item(sel[0])['values'][4]
 
         top = ctk.CTkToplevel(self.parent.winfo_toplevel())
-        top.title(f"Alterar Estado - Pedido #{id_ped}")
+        top.title(f"Alterar Estado - Pedido #{codigo}")
         top.geometry("360x210")
         top.configure(fg_color=theme.BG)
         top.transient(self.parent.winfo_toplevel())
@@ -185,9 +187,10 @@ class PedidosTab:
     def soft_delete_pedido(self):
         sel = self.tree_pedidos.selection()
         if not sel: return
-        id_ped = self.tree_pedidos.item(sel[0])['values'][0]
+        codigo = self.tree_pedidos.item(sel[0])['values'][0]
+        id_ped = PedidoService.extrair_id(codigo)
 
-        if messagebox.askyesno("Confirmar Eliminação", f"Tem a certeza que deseja eliminar o Pedido #{id_ped}?\n(O registo será mantido na base de dados por segurança)."):
+        if messagebox.askyesno("Confirmar Eliminação", f"Tem a certeza que deseja eliminar o Pedido #{codigo}?\n(O registo será mantido na base de dados por segurança)."):
             def _transformar(pedidos):
                 for p in pedidos:
                     if p.get("id") == id_ped:

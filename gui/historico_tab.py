@@ -93,7 +93,7 @@ class HistoricoTab:
             self.tab_tree.heading(c, text=c.upper(), anchor=anchors[c])
 
 
-        self.tab_tree.column("id", width=50, anchor="center")
+        self.tab_tree.column("id", width=95, anchor="center")
         self.tab_tree.column("data", width=90, anchor="center")
         self.tab_tree.column("projeto", width=200, anchor="w")
         self.tab_tree.column("maquina", width=150, anchor="w")
@@ -233,7 +233,7 @@ class HistoricoTab:
             data_tabela = log_data_str.split(" ")[0] if " " in log_data_str else log_data_str
 
             item_id = self.tab_tree.insert("", "end", values=(
-                l.get("id"), data_tabela, projeto_final, maquina_log,
+                ProducaoService.formatar_codigo(l.get("id")), data_tabela, projeto_final, maquina_log,
                 material_final, qtd_mostrar, tempo_mostrar, estado_log
             ))
             pill_dados[item_id] = (estado_log, _VARIANTE_ESTADO.get(estado_log, "neutral"))
@@ -283,8 +283,9 @@ class HistoricoTab:
     def clonar_log(self):
         sel = self.tab_tree.selection()
         if not sel: return
-        id_reg = self.tab_tree.item(sel[0])['values'][0]
-        
+        id_reg = ProducaoService.extrair_id(self.tab_tree.item(sel[0])['values'][0])
+
+
         logs = JSONManager.carregar(ARQUIVO_LOGS)
         for log in logs:
             if log.get("id") == id_reg:
@@ -307,7 +308,7 @@ class HistoricoTab:
     def abrir_tratamento_ordem(self, event=None):
         sel = self.tab_tree.selection()
         if not sel: return
-        id_reg = self.tab_tree.item(sel[0])['values'][0]
+        id_reg = ProducaoService.extrair_id(self.tab_tree.item(sel[0])['values'][0])
         for log in JSONManager.carregar(ARQUIVO_LOGS):
             if log.get("id") == id_reg:
                 JanelaFecharOrdem(self.master_app, log, self.salvar_estado_final_ordem)
@@ -331,7 +332,7 @@ class HistoricoTab:
     def remover_log(self):
         sel = self.tab_tree.selection()
         if not sel: return
-        id_reg = self.tab_tree.item(sel[0])['values'][0]
+        id_reg = ProducaoService.extrair_id(self.tab_tree.item(sel[0])['values'][0])
         if messagebox.askyesno("Aviso", "Remover do histórico local permanentemente?"):
             logs = [l for l in JSONManager.carregar(ARQUIVO_LOGS) if l.get("id") != id_reg]
             JSONManager.salvar(logs, ARQUIVO_LOGS)

@@ -299,7 +299,7 @@ class ProducaoTab:
             mats = extrair_materiais_pedido(p)
             mat_str = ", ".join(mats) if mats else "N/A"
             
-            label_text = f"ID #{id_p} | Proj: {nr_proj} | Mat: {mat_str}"
+            label_text = f"{PedidoService.formatar_codigo(id_p)} | Proj: {nr_proj} | Mat: {mat_str}"
 
             var = tk.BooleanVar(value=(id_p in ids_ja_selecionados))
             chk = ctk.CTkCheckBox(scroll_frame, text=label_text, variable=var, font=theme.font_body(11),
@@ -321,7 +321,7 @@ class ProducaoTab:
                 self.ent_pedidos_sel.insert(0, "Nenhum pedido selecionado")
             else:
                 self.pedidos_vinculados = [item["id"] for item in selecionados]
-                ids_str = ", ".join([f"#{item['id']}" for item in selecionados])
+                ids_str = ", ".join(PedidoService.formatar_codigo(item['id']) for item in selecionados)
                 self.ent_pedidos_sel.insert(0, f"Pedidos Vinculados: {ids_str}")
                 
             self.ent_pedidos_sel.configure(state="readonly")
@@ -415,6 +415,10 @@ class ProducaoTab:
         except (ValueError, TypeError):
             novo_id = len(producoes) + 1
 
+        # Vai buscar o utilizador com sessão iniciada no domínio (ex: "emerson.ribeiro"),
+        # em vez de um valor genérico fixo — fica registado quem lançou a produção.
+        responsavel = os.environ.get("USERNAME", "Desconhecido")
+
         nova_producao = {
             "id": novo_id,
             "data_inicio": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -423,7 +427,7 @@ class ProducaoTab:
             "tempo_estimado": tempo,
             "pedidos_vinculados": self.pedidos_vinculados,
             "estado": "A Imprimir",
-            "operador": "CEiiA/i3D" 
+            "operador": responsavel
         }
 
         if tech == "FDM":
@@ -454,7 +458,7 @@ class ProducaoTab:
             if modificado:
                 JSONManager.salvar(pedidos, caminho_pedidos)
 
-        messagebox.showinfo("Sucesso", f"Produção #{novo_id} iniciada com sucesso na máquina {maq}!\n\nDados guardados em producao_i3D.json.")
+        messagebox.showinfo("Sucesso", f"Produção {ProducaoService.formatar_codigo(novo_id)} iniciada com sucesso na máquina {maq}!\n\nDados guardados em producao_i3D.json.")
         
         self.ao_mudar_tecnologia(tech)
         self.ent_tempo.delete(0, 'end')

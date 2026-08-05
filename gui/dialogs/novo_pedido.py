@@ -389,7 +389,7 @@ class JanelaNovoPedido(ctk.CTkToplevel):
                 
             lista_pecas.append({"pn": pn, "material": mat_peca, "qtd_solicitada": int(qtd_str), "qtd_produzida": 0})
 
-        PedidoService.criar_pedido(
+        novo_pedido = PedidoService.criar_pedido(
             requerente_email=req,
             nr_projeto=nr_proj,
             nome_projeto=nome_proj,
@@ -399,6 +399,7 @@ class JanelaNovoPedido(ctk.CTkToplevel):
             observacoes=obs,
             pecas=lista_pecas
         )
-        messagebox.showinfo("Sucesso", "Pedido registado com sucesso!")
+        codigo = PedidoService.formatar_codigo(novo_pedido.get("id"))
+        messagebox.showinfo("Sucesso", f"Pedido {codigo} registado com sucesso!")
         self.callback_atualizar()
         self.destroy()
