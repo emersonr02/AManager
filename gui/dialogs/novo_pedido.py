@@ -5,9 +5,11 @@ from datetime import datetime
 import re
 import os
 
-from config.paths import ARQUIVO_PEDIDOS, ARQUIVO_PROJETOS, ARQUIVO_MATERIAIS
+from config.paths import ARQUIVO_PEDIDOS
 from database.json_manager import JSONManager
 from services.pedido_service import PedidoService
+from services.projeto_service import ProjetoService
+from services.material_service import MaterialService
 
 class JanelaNovoPedido(ctk.CTkToplevel):
     def __init__(self, parent, callback_atualizar):
@@ -33,28 +35,12 @@ class JanelaNovoPedido(ctk.CTkToplevel):
         return sorted([req for req in requerentes if req])
 
     def carregar_dados_auxiliares(self):
-        projs = JSONManager.carregar(ARQUIVO_PROJETOS)
-        self.lista_projetos_fmt = []
-        for p in projs:
-            if isinstance(p, dict):
-                id_p = p.get("id", p.get("nr_projeto", p.get("numero", "")))
-                nome_p = p.get("nome", p.get("nome_projeto", ""))
-                self.lista_projetos_fmt.append(f"{id_p} - {nome_p}" if nome_p else str(id_p))
-            elif isinstance(p, str):
-                self.lista_projetos_fmt.append(p)
-
+        projs = ProjetoService.obter_todos()
+        self.lista_projetos_fmt = [f"{p['id']} - {p['nome']}" if p['nome'] else p['id'] for p in projs]
         if not self.lista_projetos_fmt: self.lista_projetos_fmt = ["Sem projetos registados"]
 
-        mats = JSONManager.carregar(ARQUIVO_MATERIAIS)
-        self.lista_materiais_fmt = []
-        for m in mats:
-            if isinstance(m, dict):
-                nome_m = m.get("nome", m.get("material", m.get("nome_material", "")))
-                fab = m.get("fabricante", "")
-                self.lista_materiais_fmt.append(f"{nome_m} ({fab})" if fab else str(nome_m))
-            elif isinstance(m, str):
-                self.lista_materiais_fmt.append(m)
-
+        mats = MaterialService.obter_todos()
+        self.lista_materiais_fmt = [f"{m['nome']} - {m['fabricante']}" if m['fabricante'] else m['nome'] for m in mats]
         if not self.lista_materiais_fmt: self.lista_materiais_fmt = ["N/A"]
 
     def construir_layout(self):
