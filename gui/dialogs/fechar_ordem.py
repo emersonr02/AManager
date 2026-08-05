@@ -4,6 +4,8 @@ from tkinter import messagebox
 import os
 from database.json_manager import JSONManager
 from config.paths import ARQUIVO_PEDIDOS
+from services.producao_service import ProducaoService
+from services.nc_service import NCService
 
 class JanelaFecharOrdem(ctk.CTkToplevel):
     def __init__(self, parent, log_data, callback_salvar):
@@ -15,7 +17,7 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         
         self.title(f"Tratamento e Fecho - Ordem #{id_ordem}")
         # Aumentada a altura da janela para garantir que o botão aparece perfeitamente
-        self.geometry("520x650")
+        self.geometry("520x800")
         self.configure(fg_color="#fcfcfc")
         self.resizable(False, False)
         
@@ -64,15 +66,11 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
                 # Se o operador digitar "30" em vez de "0.3", ajustamos matematicamente
                 if perc_novo > 1:
                     perc_novo = perc_novo / 100
-                    
-                # Fórmula Oficial: =((((381*330*Altura)/1000000)*0.45)*%_Po_Novo)
-                # Onde 381x330 é a base, dividido por 1M dá o volume em Litros, e 0.45 é a densidade
-                consumo_estimado = ((((381 * 330 * altura) / 1000000) * 0.45) * perc_novo)
-                
-                # Atenção: Esta fórmula retorna o valor em Kg (Ex: 0.05). 
+
+                # Fórmula Oficial em ProducaoService.calcular_consumo_sls (retorna Kg).
                 # Se o teu painel exibe e abate stock em Gramas (g), deves multiplicar o resultado por 1000.
-                # Exemplo: consumo_estimado = consumo_estimado * 1000
-                
+                consumo_estimado = ProducaoService.calcular_consumo_sls(altura, perc_novo)
+
                 self.qtd_est = f"{consumo_estimado:.2f} (Calc. SLS)"
                 self.qtd_raw = consumo_estimado
             except ValueError:
@@ -163,9 +161,41 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         if qa_data.get("conformidade"): self.chk_conform.select()
         else: self.chk_conform.deselect()
 
+        # --- NÃO-CONFORMIDADE (OPCIONAL) ---
+        frm_nc = ctk.CTkFrame(self, fg_color="white", border_width=1, border_color="#e0e0e0", corner_radius=8)
+        frm_nc.pack(fill="x", padx=20, pady=(0, 15))
+        ctk.CTkLabel(frm_nc, text="Não-Conformidade (se aplicável):", font=("Arial", 11, "bold"), text_color="gray40").pack(anchor="w", padx=15, pady=(10, 5))
+
+        valores_nc = ["Nenhuma"] + NCService.obter_nc_por_tecnologia(self.tecnologia)
+        self.cmb_nc = ctk.CTkComboBox(frm_nc, values=valores_nc, width=460, fg_color="#f0f2f5", text_color="black", state="readonly", command=self.on_nc_selecionada)
+        self.cmb_nc.pack(padx=15, pady=(0, 5), anchor="w")
+
+        self.lbl_acoes_nc = ctk.CTkLabel(frm_nc, text="", font=("Arial", 10), text_color="gray50", justify="left", wraplength=440)
+        self.lbl_acoes_nc.pack(anchor="w", padx=15, pady=(0, 10))
+
+        nc_gravado = self.log.get("nc_codigo", "")
+        valor_inicial = next((v for v in valores_nc if v.startswith(f"{nc_gravado} -")), "Nenhuma") if nc_gravado else "Nenhuma"
+        self.cmb_nc.set(valor_inicial)
+        self.on_nc_selecionada(valor_inicial)
+
         # Botão com margem extra em baixo (pady)
         self.btn_salvar = ctk.CTkButton(self, text="SALVAR APONTAMENTO E FECHAR", fg_color="#1f538d", hover_color="#143a63", font=("Arial", 12, "bold"), height=45, command=self.salvar)
         self.btn_salvar.pack(fill="x", padx=20, pady=(10, 20))
+
+    def on_nc_selecionada(self, valor):
+        """Mostra as ações corretivas sugeridas para o código NC escolhido."""
+        if not valor or valor == "Nenhuma":
+            self.lbl_acoes_nc.configure(text="")
+            return
+
+        cod = valor.split(" - ", 1)[0]
+        acoes = NCService.obter_acoes_por_cod(cod)
+        if not acoes:
+            self.lbl_acoes_nc.configure(text="Sem ações corretivas associadas a este código.")
+            return
+
+        linhas = "\n".join(f"• {a.get('acao')}" for a in acoes)
+        self.lbl_acoes_nc.configure(text=f"Ações corretivas sugeridas:\n{linhas}")
 
     def salvar(self):
         t_real = self.ent_tempo_real.get().strip()
@@ -190,6 +220,9 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
             "controlo_dimensional": self.chk_dimens.get() == 1,
             "conformidade": self.chk_conform.get() == 1
         }
+
+        nc_sel = self.cmb_nc.get()
+        self.log["nc_codigo"] = nc_sel.split(" - ", 1)[0] if nc_sel and nc_sel != "Nenhuma" else ""
 
         self.callback_salvar(self.log)
         self.destroy()
