@@ -205,16 +205,7 @@ class PedidosTab:
         cmb_estado.pack(pady=10)
 
         def guardar_estado():
-            novo_estado = cmb_estado.get()
-
-            def _transformar(pedidos):
-                for p in pedidos:
-                    if p.get("id") == id_ped:
-                        p["estado"] = novo_estado
-                        break
-                return pedidos
-
-            JSONManager.atualizar(ARQUIVO_PEDIDOS, _transformar)
+            PedidoService.alterar_estado(id_ped, cmb_estado.get())
             self.atualizar_tabela()
             top.destroy()
 
@@ -227,13 +218,5 @@ class PedidosTab:
         id_ped = PedidoService.extrair_id(codigo)
 
         if messagebox.askyesno("Confirmar Eliminação", f"Tem a certeza que deseja eliminar o Pedido #{codigo}?\n(O registo será mantido na base de dados por segurança)."):
-            def _transformar(pedidos):
-                for p in pedidos:
-                    if p.get("id") == id_ped:
-                        p["ativo"] = False
-                        p["estado"] = "Cancelado"
-                        break
-                return pedidos
-
-            JSONManager.atualizar(ARQUIVO_PEDIDOS, _transformar)
+            PedidoService.eliminar_pedido(id_ped)
             self.atualizar_tabela()

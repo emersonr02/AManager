@@ -42,7 +42,6 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
             # Aproveitar para extrair materiais diretamente dos pedidos vinculados
             for p in pedidos_db:
                 if p.get("id") in vinculos:
-                    if p.get("material"): materiais_set.add(p["material"])
                     for peca in p.get("pecas", []):
                         if peca.get("material"): materiais_set.add(peca["material"])
         else:

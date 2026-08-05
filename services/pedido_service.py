@@ -75,3 +75,56 @@ class PedidoService:
 
         JSONManager.atualizar(ARQUIVO_PEDIDOS, _transformar)
         return pedido_atualizado
+
+    @staticmethod
+    def alterar_estado(id_pedido, novo_estado: str):
+        """Atualiza só o estado do pedido, renovando a data de atualização —
+        para não haver dois caminhos (edição completa vs. troca rápida de
+        estado) com regras diferentes sobre quando essa data é tocada."""
+        hoje = datetime.now().strftime("%Y-%m-%d")
+
+        def _transformar(pedidos):
+            for p in pedidos:
+                if p.get("id") == id_pedido:
+                    p["estado"] = novo_estado
+                    p["data_atualizacao"] = hoje
+                    break
+            return pedidos
+
+        JSONManager.atualizar(ARQUIVO_PEDIDOS, _transformar)
+
+    @staticmethod
+    def eliminar_pedido(id_pedido):
+        """Soft delete: marca o pedido como inativo e cancelado, mantendo o
+        registo na base de dados."""
+        hoje = datetime.now().strftime("%Y-%m-%d")
+
+        def _transformar(pedidos):
+            for p in pedidos:
+                if p.get("id") == id_pedido:
+                    p["ativo"] = False
+                    p["estado"] = "Cancelado"
+                    p["data_atualizacao"] = hoje
+                    break
+            return pedidos
+
+        JSONManager.atualizar(ARQUIVO_PEDIDOS, _transformar)
+
+    @staticmethod
+    def vincular_producao(ids_pedidos: list, id_producao):
+        """Liga uma produção aos pedidos que ela cobre: regista o id da
+        produção em 'producoes_vinculadas' (link inverso, hoje nunca escrito)
+        e marca os pedidos como Em Andamento."""
+        hoje = datetime.now().strftime("%Y-%m-%d")
+
+        def _transformar(pedidos):
+            for p in pedidos:
+                if p.get("id") in ids_pedidos:
+                    vinculadas = p.setdefault("producoes_vinculadas", [])
+                    if id_producao not in vinculadas:
+                        vinculadas.append(id_producao)
+                    p["estado"] = "Em Andamento"
+                    p["data_atualizacao"] = hoje
+            return pedidos
+
+        JSONManager.atualizar(ARQUIVO_PEDIDOS, _transformar)
