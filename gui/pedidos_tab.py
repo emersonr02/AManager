@@ -141,10 +141,8 @@ class PedidosTab:
 
         texto = (
             "Bom dia,\n\n"
-            f"O seu pedido de impressão ID: {codigo} está em: {estado}.\n\n"
+            f"O seu pedido de impressão ID: {codigo} está: {estado}.\n\n"
             "Qualquer dúvida, estamos disponíveis.\n\n"
-            "Cumprimentos,\n"
-            "Equipa i3D | CEiiA"
         )
 
         top = ctk.CTkToplevel(self.parent.winfo_toplevel())
