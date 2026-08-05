@@ -91,18 +91,18 @@ class PedidosTab:
         
         for p in pedidos:
             # SOFT DELETE: Ignora pedidos marcados como inativos ou cancelados
-            if p.get("ativo") is False or p.get("estado", p.get("status")) == "Cancelado":
+            if p.get("ativo") is False or p.get("estado") == "Cancelado":
                 continue
-                
-            status = p.get("estado", p.get("status", "Pendente"))
-            
+
+            status = p.get("estado", "Pendente")
+
             total_ativos += 1
             if status == "Em Andamento": andamento += 1
             if status in ["Entregue", "Concluído"]: entregues += 1
-            
+
             self.tree_pedidos.insert("", "end", values=(
-                p.get("id", p.get("id_pedido")), p.get("data_pedido"), p.get("requerente_email", p.get("requerente")), 
-                p.get("nr_projeto", p.get("projeto")), status, p.get("tecnologia")
+                p.get("id"), p.get("data_pedido"), p.get("requerente_email"),
+                p.get("nr_projeto"), status, p.get("tecnologia")
             ))
             
         self.lbl_kpi_total.configure(text=str(total_ativos))
@@ -130,7 +130,7 @@ class PedidosTab:
         
         pedidos = JSONManager.carregar(ARQUIVO_PEDIDOS)
         for p in pedidos:
-            if p.get("id", p.get("id_pedido")) == id_ped:
+            if p.get("id") == id_ped:
                 JanelaEditarPedido(self.parent.winfo_toplevel(), p, self.atualizar_tabela)
                 break
 
@@ -156,9 +156,8 @@ class PedidosTab:
             novo_estado = cmb_estado.get()
             pedidos = JSONManager.carregar(ARQUIVO_PEDIDOS)
             for p in pedidos:
-                if p.get("id", p.get("id_pedido")) == id_ped:
+                if p.get("id") == id_ped:
                     p["estado"] = novo_estado
-                    p["status"] = novo_estado
                     break
             JSONManager.salvar(pedidos, ARQUIVO_PEDIDOS)
             self.atualizar_tabela()
@@ -174,10 +173,9 @@ class PedidosTab:
         if messagebox.askyesno("Confirmar Eliminação", f"Tem a certeza que deseja eliminar o Pedido #{id_ped}?\n(O registo será mantido na base de dados por segurança)."):
             pedidos = JSONManager.carregar(ARQUIVO_PEDIDOS)
             for p in pedidos:
-                if p.get("id", p.get("id_pedido")) == id_ped:
-                    p["ativo"] = False 
-                    p["estado"] = "Cancelado" 
-                    p["status"] = "Cancelado"
+                if p.get("id") == id_ped:
+                    p["ativo"] = False
+                    p["estado"] = "Cancelado"
                     break
             JSONManager.salvar(pedidos, ARQUIVO_PEDIDOS)
             self.atualizar_tabela()

@@ -12,7 +12,7 @@ class JanelaEditarPedido(ctk.CTkToplevel):
         self.pedido = pedido
         self.callback_atualizar = callback_atualizar
         
-        self.title(f"Editar Pedido #{self.pedido.get('id', self.pedido.get('id_pedido'))}")
+        self.title(f"Editar Pedido #{self.pedido.get('id')}")
         self.geometry("820x820")
         self.configure(fg_color="#fcfcfc")
         self.resizable(False, False)
@@ -56,7 +56,7 @@ class JanelaEditarPedido(ctk.CTkToplevel):
             self.lista_materiais_fmt = ["N/A"]
 
     def construir_layout(self):
-        ctk.CTkLabel(self, text=f"Editar Pedido #{self.pedido.get('id', self.pedido.get('id_pedido'))}", font=("Arial", 18, "bold"), text_color="#1f538d").pack(pady=(15, 5))
+        ctk.CTkLabel(self, text=f"Editar Pedido #{self.pedido.get('id')}", font=("Arial", 18, "bold"), text_color="#1f538d").pack(pady=(15, 5))
 
         # --- CABEÇALHO DO PEDIDO ---
         frm_master = ctk.CTkFrame(self, fg_color="white", border_width=1, border_color="#e0e0e0", corner_radius=8)
@@ -201,10 +201,10 @@ class JanelaEditarPedido(ctk.CTkToplevel):
             })
 
         pedidos = JSONManager.carregar(ARQUIVO_PEDIDOS)
-        target_id = self.pedido.get("id", self.pedido.get("id_pedido"))
+        target_id = self.pedido.get("id")
 
         for p in pedidos:
-            if p.get("id", p.get("id_pedido")) == target_id:
+            if p.get("id") == target_id:
                 p["requerente_email"] = req
                 p["nr_projeto"] = nr_proj
                 p["nome_projeto"] = nome_proj

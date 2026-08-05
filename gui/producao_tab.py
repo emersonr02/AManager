@@ -5,6 +5,7 @@ import os
 from database.json_manager import JSONManager
 from services.pedido_service import PedidoService
 from services.producao_service import ProducaoService
+from config.paths import ARQUIVO_LOGS, ARQUIVO_PEDIDOS, ARQUIVO_MAQUINAS
 
 class ProducaoTab:
     def __init__(self, parent_frame, f_padrao, f_titulo, master_app=None):
@@ -131,11 +132,8 @@ class ProducaoTab:
 
     def preencher_lote_anterior(self):
         if self.chk_var_lote.get():
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            caminho_producoes = os.path.join(base_dir, "data", "producao_i3D.json")
-            
-            if os.path.exists(caminho_producoes):
-                producoes = JSONManager.carregar(caminho_producoes)
+            if os.path.exists(ARQUIVO_LOGS):
+                producoes = JSONManager.carregar(ARQUIVO_LOGS)
                 lotes_sls = [p.get("lote_po") for p in producoes if p.get("tecnologia") == "SLS" and p.get("lote_po")]
                 
                 if lotes_sls:
@@ -198,9 +196,8 @@ class ProducaoTab:
         if not hasattr(self, 'cmb_maq'): return
         
         tech_atual = self.cmb_tech.get()
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        caminho_final = os.path.join(base_dir, "data", "parque_maquinas.json")
-            
+        caminho_final = ARQUIVO_MAQUINAS
+
         if not os.path.exists(caminho_final):
             self.cmb_maq.configure(values=["Ficheiro parque_maquinas.json não encontrado"])
             self.cmb_maq.set("Sem dados")
@@ -212,9 +209,9 @@ class ProducaoTab:
             
             for imp in impressoras:
                 if isinstance(imp, dict):
-                    t = imp.get("tecnologia", imp.get("tech", tech_atual)) 
-                    nome = imp.get("nome", imp.get("modelo", "Desconhecida"))
-                    st = imp.get("status", imp.get("estado", "Ativa"))
+                    t = imp.get("tech", tech_atual)
+                    nome = imp.get("nome", "Desconhecida")
+                    st = imp.get("estado", "Ativa")
                     
                     if t == tech_atual and st not in ["Inativa", "Manutenção"]:
                         maquinas_compativeis.append(nome)
@@ -239,7 +236,7 @@ class ProducaoTab:
         
         pedidos_compativeis = [
             p for p in pedidos_db 
-            if p.get("estado", p.get("status", "")) in ["Pendente", "Em Andamento"]
+            if p.get("estado", "") in ["Pendente", "Em Andamento"]
             and p.get("tecnologia") == tech_atual
         ]
 
@@ -286,8 +283,8 @@ class ProducaoTab:
                         item["widget"].configure(state="disabled", text_color="gray60")
 
         for p in pedidos_compativeis:
-            id_p = p.get("id", p.get("id_pedido"))
-            nr_proj = p.get("nr_projeto", p.get("projeto", "S/N"))
+            id_p = p.get("id")
+            nr_proj = p.get("nr_projeto", "S/N")
             mats = extrair_materiais_pedido(p)
             mat_str = ", ".join(mats) if mats else "N/A"
             
@@ -391,14 +388,13 @@ class ProducaoTab:
         # 3. GRAVAÇÃO DOS DADOS
         # ==========================================
         from datetime import datetime
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        caminho_producoes = os.path.join(base_dir, "data", "producao_i3D.json")
-        caminho_pedidos = os.path.join(base_dir, "data", "pedidos.json")
+        caminho_producoes = ARQUIVO_LOGS
+        caminho_pedidos = ARQUIVO_PEDIDOS
 
         producoes = JSONManager.carregar(caminho_producoes) if os.path.exists(caminho_producoes) else []
         
         try:
-            novo_id = max([int(p.get("id", p.get("id_producao", 0))) for p in producoes]) + 1 if producoes else 1
+            novo_id = max([int(p.get("id", 0)) for p in producoes]) + 1 if producoes else 1
         except (ValueError, TypeError):
             novo_id = len(producoes) + 1
 
@@ -434,10 +430,8 @@ class ProducaoTab:
             pedidos = JSONManager.carregar(caminho_pedidos)
             modificado = False
             for p in pedidos:
-                if p.get("id", p.get("id_pedido")) in self.pedidos_vinculados:
+                if p.get("id") in self.pedidos_vinculados:
                     p["estado"] = "Em Andamento"
-                    if "status" in p:  
-                        p["status"] = "Em Andamento"
                     modificado = True
             
             if modificado:
