@@ -1,7 +1,9 @@
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import ttk, messagebox
-from services.pedido_service import PedidoService
+import os
+from database.json_manager import JSONManager
+from config.paths import ARQUIVO_PEDIDOS
 from gui.dialogs.novo_pedido import JanelaNovoPedido
 from gui.dialogs.editar_pedido import JanelaEditarPedido
 
@@ -12,14 +14,13 @@ class PedidosTab:
         self.f_titulo = f_titulo
         self.master_app = master_app
         
-        # Fundo ligeiramente cinza para fazer os cartões brancos "saltarem"
         self.parent.configure(fg_color="#f0f2f5")
         
         self.construir_layout()
         self.atualizar_tabela()
 
     def construir_layout(self):
-        # 1. HEADER (Título e Botão + Novo)
+        # 1. HEADER
         frm_header = ctk.CTkFrame(self.parent, fg_color="transparent")
         frm_header.pack(fill="x", padx=20, pady=(20, 10))
         
@@ -30,36 +31,32 @@ class PedidosTab:
         frm_kpi = ctk.CTkFrame(self.parent, fg_color="transparent")
         frm_kpi.pack(fill="x", padx=20, pady=10)
         
-        self.lbl_kpi_total = self.criar_card_kpi(frm_kpi, "📋 Total de Pedidos", "0", 0)
+        self.lbl_kpi_total = self.criar_card_kpi(frm_kpi, "📋 Total Ativos", "0", 0)
         self.lbl_kpi_andamento = self.criar_card_kpi(frm_kpi, "⏳ Em Andamento", "0", 1)
         self.lbl_kpi_entregues = self.criar_card_kpi(frm_kpi, "✅ Entregues", "0", 2)
 
-        # 3. ÁREA DA TABELA (Container Branco)
+        # 3. ÁREA DA TABELA
         frm_lista = ctk.CTkFrame(self.parent, fg_color="white", corner_radius=10)
-        frm_lista.pack(fill="both", expand=True, padx=20, pady=20) # Margem inferior ajustada
+        frm_lista.pack(fill="both", expand=True, padx=20, pady=20)
 
-        # Pequena barra de pesquisa acima da tabela
-        frm_search = ctk.CTkFrame(frm_lista, fg_color="transparent")
-        frm_search.pack(fill="x", padx=10, pady=10)
-        ctk.CTkEntry(frm_search, placeholder_text="Pesquisar pedido...", width=250, fg_color="#f0f2f5", border_width=0).pack(side="left")
-
-        # TABELA (Seleção simples reposta)
-        cols = ("id", "data", "requerente", "projeto", "status", "tech", "material")
+        # TABELA
+        cols = ("id", "data", "requerente", "projeto", "status", "tech")
         self.tree_pedidos = ttk.Treeview(frm_lista, columns=cols, show="headings", style="Custom.Treeview")
         
-        cabecalhos = ["ID", "DATA", "REQUERENTE", "PROJETO", "STATUS", "TECH", "MATERIAL"]
+        cabecalhos = ["ID", "DATA", "REQUERENTE", "PROJETO", "STATUS", "TECH"]
         for c, h in zip(cols, cabecalhos): 
             self.tree_pedidos.heading(c, text=h)
             
         self.tree_pedidos.column("id", width=50, anchor="center")
         self.tree_pedidos.column("data", width=100, anchor="center")
         self.tree_pedidos.column("requerente", width=150, anchor="w")
-        self.tree_pedidos.column("projeto", width=150, anchor="w")
-        self.tree_pedidos.column("status", width=100, anchor="center")
+        self.tree_pedidos.column("projeto", width=200, anchor="w")
+        self.tree_pedidos.column("status", width=120, anchor="center")
         self.tree_pedidos.column("tech", width=80, anchor="center")
-        self.tree_pedidos.column("material", width=120, anchor="center")
 
+        # EVENTOS: Duplo clique para editar / Clique direito para menu CRUD
         self.tree_pedidos.bind("<Double-1>", self.abrir_edicao)
+        self.tree_pedidos.bind("<Button-3>", self.mostrar_menu_contexto)
 
         sb_ped = ttk.Scrollbar(frm_lista, orient="vertical", command=self.tree_pedidos.yview)
         self.tree_pedidos.configure(yscrollcommand=sb_ped.set)
@@ -87,24 +84,41 @@ class PedidosTab:
 
     def atualizar_tabela(self):
         for i in self.tree_pedidos.get_children(): self.tree_pedidos.delete(i)
-        pedidos = PedidoService.obter_todos()
         
-        andamento = 0
-        entregues = 0
+        pedidos = JSONManager.carregar(ARQUIVO_PEDIDOS) if os.path.exists(ARQUIVO_PEDIDOS) else []
+        
+        total_ativos, andamento, entregues = 0, 0, 0
         
         for p in pedidos:
-            status = p.get("status", p.get("estado", "Pendente"))
+            # SOFT DELETE: Ignora pedidos marcados como inativos ou cancelados
+            if p.get("ativo") is False or p.get("estado", p.get("status")) == "Cancelado":
+                continue
+                
+            status = p.get("estado", p.get("status", "Pendente"))
+            
+            total_ativos += 1
             if status == "Em Andamento": andamento += 1
-            if status == "Entregue" or status == "Concluída": entregues += 1
+            if status in ["Entregue", "Concluído"]: entregues += 1
             
             self.tree_pedidos.insert("", "end", values=(
                 p.get("id", p.get("id_pedido")), p.get("data_pedido"), p.get("requerente_email", p.get("requerente")), 
-                p.get("nr_projeto", p.get("projeto")), status, p.get("tecnologia"), p.get("material")
+                p.get("nr_projeto", p.get("projeto")), status, p.get("tecnologia")
             ))
             
-        self.lbl_kpi_total.configure(text=str(len(pedidos)))
+        self.lbl_kpi_total.configure(text=str(total_ativos))
         self.lbl_kpi_andamento.configure(text=str(andamento))
         self.lbl_kpi_entregues.configure(text=str(entregues))
+
+    def mostrar_menu_contexto(self, event):
+        item = self.tree_pedidos.identify_row(event.y)
+        if item:
+            self.tree_pedidos.selection_set(item)
+            menu = tk.Menu(self.parent, tearoff=0, font=("Arial", 10))
+            menu.add_command(label="✏️ Editar Pedido", command=self.abrir_edicao)
+            menu.add_command(label="🔄 Alterar Estado", command=self.abrir_dialogo_estado)
+            menu.add_separator()
+            menu.add_command(label="🗑️ Eliminar (Soft Delete)", command=self.soft_delete_pedido)
+            menu.post(event.x_root, event.y_root)
 
     def abrir_novo_pedido(self):
         JanelaNovoPedido(self.parent.winfo_toplevel(), self.atualizar_tabela)
@@ -114,7 +128,56 @@ class PedidosTab:
         if not sel: return
         id_ped = self.tree_pedidos.item(sel[0])['values'][0]
         
-        for p in PedidoService.obter_todos():
+        pedidos = JSONManager.carregar(ARQUIVO_PEDIDOS)
+        for p in pedidos:
             if p.get("id", p.get("id_pedido")) == id_ped:
                 JanelaEditarPedido(self.parent.winfo_toplevel(), p, self.atualizar_tabela)
                 break
+
+    def abrir_dialogo_estado(self):
+        sel = self.tree_pedidos.selection()
+        if not sel: return
+        id_ped = self.tree_pedidos.item(sel[0])['values'][0]
+        status_atual = self.tree_pedidos.item(sel[0])['values'][4]
+
+        top = ctk.CTkToplevel(self.parent.winfo_toplevel())
+        top.title(f"Alterar Estado - Pedido #{id_ped}")
+        top.geometry("350x200")
+        top.transient(self.parent.winfo_toplevel())
+        top.grab_set()
+
+        ctk.CTkLabel(top, text="Novo Estado do Pedido:", font=("Arial", 12, "bold")).pack(pady=(20, 10))
+        
+        cmb_estado = ctk.CTkComboBox(top, values=["Pendente", "Em Andamento", "Concluído", "Entregue"], width=200, state="readonly")
+        cmb_estado.set(status_atual)
+        cmb_estado.pack(pady=10)
+
+        def guardar_estado():
+            novo_estado = cmb_estado.get()
+            pedidos = JSONManager.carregar(ARQUIVO_PEDIDOS)
+            for p in pedidos:
+                if p.get("id", p.get("id_pedido")) == id_ped:
+                    p["estado"] = novo_estado
+                    p["status"] = novo_estado
+                    break
+            JSONManager.salvar(pedidos, ARQUIVO_PEDIDOS)
+            self.atualizar_tabela()
+            top.destroy()
+
+        ctk.CTkButton(top, text="GUARDAR", fg_color="#1f538d", command=guardar_estado).pack(pady=10)
+
+    def soft_delete_pedido(self):
+        sel = self.tree_pedidos.selection()
+        if not sel: return
+        id_ped = self.tree_pedidos.item(sel[0])['values'][0]
+
+        if messagebox.askyesno("Confirmar Eliminação", f"Tem a certeza que deseja eliminar o Pedido #{id_ped}?\n(O registo será mantido na base de dados por segurança)."):
+            pedidos = JSONManager.carregar(ARQUIVO_PEDIDOS)
+            for p in pedidos:
+                if p.get("id", p.get("id_pedido")) == id_ped:
+                    p["ativo"] = False 
+                    p["estado"] = "Cancelado" 
+                    p["status"] = "Cancelado"
+                    break
+            JSONManager.salvar(pedidos, ARQUIVO_PEDIDOS)
+            self.atualizar_tabela()

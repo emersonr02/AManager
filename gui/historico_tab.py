@@ -2,8 +2,9 @@ from datetime import datetime
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+import os
 
-from config.paths import ARQUIVO_LOGS
+from config.paths import ARQUIVO_LOGS, ARQUIVO_PEDIDOS
 from database.json_manager import JSONManager
 from services.producao_service import ProducaoService
 from services.export_service import ExportService
@@ -88,9 +89,9 @@ class HistoricoTab:
         
         self.tab_tree.column("id", width=50, anchor="center")
         self.tab_tree.column("data", width=100, anchor="center")
-        self.tab_tree.column("projeto", width=150, anchor="w")
-        self.tab_tree.column("maquina", width=90, anchor="center")
-        self.tab_tree.column("material", width=140, anchor="w")
+        self.tab_tree.column("projeto", width=220, anchor="w")
+        self.tab_tree.column("maquina", width=110, anchor="center")
+        self.tab_tree.column("material", width=160, anchor="w")
         self.tab_tree.column("qnt", width=80, anchor="center")
         self.tab_tree.column("tempo", width=80, anchor="center")
         self.tab_tree.column("estado", width=120, anchor="center")
@@ -130,8 +131,9 @@ class HistoricoTab:
         style.map("Dashboard.Treeview", background=[("selected", "#1f538d")], foreground=[("selected", "white")])
 
     def carregar_combos_filtro(self):
-        logs = JSONManager.carregar(ARQUIVO_LOGS)
-        maquinas = ["Todas"] + sorted(list(set(l.get("id_maquina", "") for l in logs if l.get("id_maquina"))))
+        logs = JSONManager.carregar(ARQUIVO_LOGS) if os.path.exists(ARQUIVO_LOGS) else []
+        # Suporta logs antigos ('id_maquina') e novos ('maquina')
+        maquinas = ["Todas"] + sorted(list(set(l.get("maquina", l.get("id_maquina", "")) for l in logs if l.get("maquina") or l.get("id_maquina"))))
         self.flt_maq.configure(values=maquinas)
         self.flt_maq.set("Todas")
 
@@ -146,6 +148,10 @@ class HistoricoTab:
         self.atualizar_tabela()
 
     def parse_data_segura(self, data_str):
+        if not data_str: return None
+        # Limpa as horas se existirem (ex: "2026-08-04 15:59:21")
+        if " " in data_str:
+            data_str = data_str.split(" ")[0]
         try:
             return datetime.strptime(data_str, "%Y-%m-%d").date()
         except ValueError:
@@ -168,47 +174,76 @@ class HistoricoTab:
         sucesso_pecas = 0
         total_horas = 0.0
 
-        logs = JSONManager.carregar(ARQUIVO_LOGS)
-        logs.sort(key=lambda x: int(x.get("id", 0)), reverse=True)
+        logs = JSONManager.carregar(ARQUIVO_LOGS) if os.path.exists(ARQUIVO_LOGS) else []
+        pedidos_db = JSONManager.carregar(ARQUIVO_PEDIDOS) if os.path.exists(ARQUIVO_PEDIDOS) else []
+        
+        logs.sort(key=lambda x: int(x.get("id", x.get("id_producao", 0))), reverse=True)
 
         for l in logs:
-            # Filtros de Texto
-            if proj_q and proj_q not in str(l.get("nr_projeto", "")).lower(): continue
-            if mat_q and mat_q not in str(l.get("material", "")).lower(): continue
+            # --- 1. INTEGRAÇÃO N:N (PROJETO E MATERIAL) ---
+            if "pedidos_vinculados" in l and isinstance(l["pedidos_vinculados"], list) and l["pedidos_vinculados"]:
+                vinculos = l["pedidos_vinculados"]
+                projetos_set = set()
+                materiais_set = set()
+
+                for p in pedidos_db:
+                    if p.get("id", p.get("id_pedido")) in vinculos:
+                        nr_proj = p.get("nr_projeto", p.get("projeto", ""))
+                        nome_proj = p.get("nome_projeto", "")
+                        proj_str = f"{nr_proj} - {nome_proj}" if nome_proj else str(nr_proj)
+                        if proj_str: projetos_set.add(proj_str)
+
+                        if p.get("material"): materiais_set.add(p["material"])
+                        for peca in p.get("pecas", []):
+                            if peca.get("material"): materiais_set.add(peca["material"])
+
+                projeto_final = " | ".join(projetos_set) if projetos_set else "Sem Projeto"
+                material_final = " | ".join(materiais_set) if materiais_set else "N/A"
+            else:
+                projeto_final = str(l.get("nr_projeto", l.get("projeto", "")))
+                material_final = str(l.get("material", ""))
+
+            # --- 2. FILTROS DE TEXTO ---
+            if proj_q and proj_q not in projeto_final.lower(): continue
+            if mat_q and mat_q not in material_final.lower(): continue
             if cod_q and cod_q not in str(l.get("erro", "")).lower(): continue
             
-            # Filtros de Combobox
-            if maq_q != "Todas" and l.get("id_maquina") != maq_q: continue
+            # --- 3. FILTROS DE COMBOBOX E ESTADO ---
+            maquina_log = l.get("maquina", l.get("id_maquina", ""))
+            if maq_q != "Todas" and maquina_log != maq_q: continue
             
-            estado_log = l.get("estado", "Em Andamento")
-            # Correção de compatibilidade caso logs antigos tenham "Falha"
+            estado_log = l.get("estado", l.get("status", "Em Andamento"))
             if estado_log == "Falha": estado_log = "Cancelada" 
+            if estado_log == "A Imprimir": estado_log = "Em Andamento" # Uniformizar filtros
             if est_q != "Todos" and estado_log != est_q: continue
 
-            # Filtros de Data
-            log_data = self.parse_data_segura(l.get("data_inicio", ""))
+            # --- 4. FILTROS DE DATA ---
+            log_data_str = l.get("data_inicio", l.get("data", ""))
+            log_data = self.parse_data_segura(log_data_str)
             if log_data:
                 if d_ini and log_data < d_ini: continue
                 if d_fim and log_data > d_fim: continue
 
-            # Se passou em todos os filtros, insere na tabela!
-            # Prioriza mostrar os dados reais (se existirem) em vez da estimativa
-            tempo_mostrar = l.get("tempo_real", l.get("hora_maquina", "00:00"))
-            qtd_mostrar = l.get("quantidade_real", l.get("quantidade", 0.0))
+            # --- 5. ADICIONAR À TABELA ---
+            tempo_mostrar = l.get("tempo_real", l.get("tempo_estimado", l.get("hora_maquina", l.get("tempo", "00:00"))))
+            qtd_mostrar = l.get("quantidade_real", l.get("quantidade_consumida", l.get("quantidade", l.get("qnt", 0.0))))
+
+            # Formata a data para a tabela (esconde a hora se existir)
+            data_tabela = log_data_str.split(" ")[0] if " " in log_data_str else log_data_str
 
             self.tab_tree.insert("", "end", values=(
-                l.get("id"), l.get("data_inicio", ""), l.get("nr_projeto", ""), l.get("id_maquina", ""), 
-                l.get("material", ""), qtd_mostrar, tempo_mostrar, estado_log
+                l.get("id", l.get("id_producao")), data_tabela, projeto_final, maquina_log, 
+                material_final, qtd_mostrar, tempo_mostrar, estado_log
             ))
             
             # Cálculos de KPI focados apenas nas peças listadas no ecrã
             total_filtradas += 1
-            if estado_log == "Concluída": 
+            if estado_log in ["Concluída", "Entregue"]: 
                 sucesso_pecas += 1
-            total_horas += ProducaoService.converter_para_horas(tempo_mostrar)
+            total_horas += ProducaoService.converter_para_horas(str(tempo_mostrar))
 
-        # Taxa de sucesso ignora as peças "Em Andamento" para não puxar a média para baixo
-        pecas_finalizadas = sum(1 for item in self.tab_tree.get_children() if self.tab_tree.item(item)['values'][7] in ["Concluída", "Cancelada"])
+        # Taxa de sucesso ignora as peças "Em Andamento"
+        pecas_finalizadas = sum(1 for item in self.tab_tree.get_children() if self.tab_tree.item(item)['values'][7] in ["Concluída", "Entregue", "Cancelada"])
         taxa = (sucesso_pecas / pecas_finalizadas * 100) if pecas_finalizadas > 0 else 0.0
         
         self.lbl_kpi_total.configure(text=str(total_filtradas))
@@ -247,13 +282,13 @@ class HistoricoTab:
         
         logs = JSONManager.carregar(ARQUIVO_LOGS)
         for log in logs:
-            if log.get("id") == id_reg:
+            if log.get("id", log.get("id_producao")) == id_reg:
                 novo_log = log.copy()
-                novo_log["id"] = max([l.get("id", 0) for l in logs]) + 1
-                novo_log["data_inicio"] = datetime.now().strftime("%Y-%m-%d")
+                novo_log["id"] = max([int(l.get("id", l.get("id_producao", 0))) for l in logs]) + 1
+                novo_log["data_inicio"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 novo_log["estado"] = "Em Andamento"
                 novo_log["erro"] = ""
-                # Limpa dados reais na clonagem, pois a nova peça volta a ser estimada
+                # Limpa dados reais na clonagem
                 novo_log.pop("tempo_real", None)
                 novo_log.pop("quantidade_real", None)
                 
@@ -269,25 +304,24 @@ class HistoricoTab:
         if not sel: return
         id_reg = self.tab_tree.item(sel[0])['values'][0]
         for log in JSONManager.carregar(ARQUIVO_LOGS):
-            if log.get("id") == id_reg:
+            if log.get("id", log.get("id_producao")) == id_reg:
                 JanelaFecharOrdem(self.master_app, log, self.salvar_estado_final_ordem)
                 break
 
     def salvar_estado_final_ordem(self, log_atualizado):
-        # 1. Guarda a atualização na base de dados de Produção (Logs)
+        # 1. Guarda a atualização na base de dados
         logs = JSONManager.carregar(ARQUIVO_LOGS)
         for idx, log in enumerate(logs):
-            if log.get("id") == log_atualizado["id"]:
+            if log.get("id", log.get("id_producao")) == log_atualizado.get("id", log_atualizado.get("id_producao")):
                 logs[idx] = log_atualizado
                 break
         JSONManager.salvar(logs, ARQUIVO_LOGS)
 
-        # 2. RASTREABILIDADE BIDIRECIONAL (O FECHO DA SPRINT 5)
+        # 2. RASTREABILIDADE BIDIRECIONAL
         estado_final = log_atualizado.get("estado")
         pedidos_vinc = log_atualizado.get("pedidos_vinculados", [])
         
         if pedidos_vinc:
-            from config.paths import ARQUIVO_PEDIDOS
             pedidos_db = JSONManager.carregar(ARQUIVO_PEDIDOS)
             mudou_pedido = False
             
@@ -297,7 +331,6 @@ class HistoricoTab:
                         p["status"] = "Entregue"
                         p["estado"] = "Entregue"
                     elif estado_final == "Cancelada":
-                        # Se falhou, volta para a fila de espera para ser refeito
                         p["status"] = "Pendente"
                         p["estado"] = "Pendente"
                     mudou_pedido = True
@@ -305,7 +338,6 @@ class HistoricoTab:
             if mudou_pedido:
                 JSONManager.salvar(pedidos_db, ARQUIVO_PEDIDOS)
 
-        # 3. Refresca a tabela do Histórico para refletir as mudanças
         self.atualizar_tabela()
 
     def remover_log(self):
@@ -313,7 +345,7 @@ class HistoricoTab:
         if not sel: return
         id_reg = self.tab_tree.item(sel[0])['values'][0]
         if messagebox.askyesno("Aviso", "Remover do histórico local permanentemente?"):
-            logs = [l for l in JSONManager.carregar(ARQUIVO_LOGS) if l.get("id") != id_reg]
+            logs = [l for l in JSONManager.carregar(ARQUIVO_LOGS) if l.get("id", l.get("id_producao")) != id_reg]
             JSONManager.salvar(logs, ARQUIVO_LOGS)
             self.carregar_combos_filtro()
             self.atualizar_tabela()

@@ -71,8 +71,9 @@ class ProducaoTab:
         ctk.CTkLabel(self.frm_sls_checklist, text="⚙️ Parâmetros Básicos e Checklist Crítico SLS", font=("Arial", 12, "bold"), text_color="#1f538d").grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(10, 5))
 
         self.chk_var_lote = tk.BooleanVar(value=False)
-        ctk.CTkCheckBox(self.frm_sls_checklist, text="Mesmo lote da produção anterior?", font=("Arial", 11, "bold"), variable=self.chk_var_lote).grid(row=1, column=0, columnspan=2, padx=15, pady=(5, 10), sticky="w")
-
+        self.chk_lote = ctk.CTkCheckBox(self.frm_sls_checklist, text="Mesmo lote da produção anterior?", font=("Arial", 11, "bold"), variable=self.chk_var_lote, command=self.preencher_lote_anterior)
+        self.chk_lote.grid(row=1, column=0, columnspan=3, padx=15, pady=(5, 10), sticky="w") 
+        
         ctk.CTkLabel(self.frm_sls_checklist, text="Lote do Pó:", font=self.f_padrao, text_color="gray30").grid(row=2, column=0, padx=15, pady=5, sticky="w")
         self.ent_lote = ctk.CTkEntry(self.frm_sls_checklist, width=200, fg_color="white", border_color="gray80", text_color="black")
         self.ent_lote.grid(row=2, column=1, columnspan=2, padx=5, pady=5, sticky="w")
@@ -289,7 +290,7 @@ class ProducaoTab:
         tech = self.cmb_tech.get()
         maq = self.cmb_maq.get()
 
-        if maq.startswith("Sem máquinas") or maq == "A carregar...":
+        if maq.startswith("Sem máquinas") or maq == "A carregar..." or maq.startswith("Erro"):
             messagebox.showwarning("Aviso", "Selecione uma máquina válida antes de iniciar o fabrico.")
             return
 
@@ -297,15 +298,19 @@ class ProducaoTab:
         import os
         from database.json_manager import JSONManager
         
-        # 2. CAMINHOS DOS FICHEIROS
+        # 2. CAMINHOS DOS FICHEIROS EXATOS (Baseados no repositório)
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        caminho_producoes = os.path.join(base_dir, "data", "producoes.json")
+        caminho_producoes = os.path.join(base_dir, "data", "producao_i3D.json") # O ficheiro correto!
         caminho_pedidos = os.path.join(base_dir, "data", "pedidos.json")
 
-        # 3. GUARDAR A PRODUÇÃO NO FICHEIRO producoes.json
-        # (Se o ficheiro não existir, cria uma lista vazia)
+        # 3. GUARDAR A PRODUÇÃO NO FICHEIRO producao_i3D.json
         producoes = JSONManager.carregar(caminho_producoes) if os.path.exists(caminho_producoes) else []
-        novo_id = max([p.get("id", 0) for p in producoes]) + 1 if producoes else 1
+        
+        # Procura o último ID (trata casos onde o ID pode ser string ou int)
+        try:
+            novo_id = max([int(p.get("id", p.get("id_producao", 0))) for p in producoes]) + 1 if producoes else 1
+        except (ValueError, TypeError):
+            novo_id = len(producoes) + 1
 
         nova_producao = {
             "id": novo_id,
@@ -314,18 +319,20 @@ class ProducaoTab:
             "maquina": maq,
             "tempo_estimado": tempo,
             "pedidos_vinculados": self.pedidos_vinculados,
-            "estado": "A Imprimir", # O estado da produção
-            "operador": "Emerson Ribeiro" # Pode vir a ser dinâmico no futuro com o login
+            "estado": "A Imprimir",
+            "operador": "CEiiA/i3D" 
         }
 
         # Guardar parâmetros específicos da tecnologia
         if tech in ["FDM", "SLA"]:
-            nova_producao["quantidade_consumida"] = self.ent_quant.get().strip()
+            if hasattr(self, 'ent_quant'):
+                nova_producao["quantidade_consumida"] = self.ent_quant.get().strip()
         elif tech == "SLS":
-            nova_producao["altura_cuba"] = self.ent_altura.get().strip()
-            nova_producao["percentagem_po_novo"] = self.ent_perc.get().strip()
-            nova_producao["lote_po"] = self.ent_lote.get().strip()
-            nova_producao["checklist_seguranca"] = {k: v.get() for k, v in self.sls_vars.items()}
+            if hasattr(self, 'ent_altura'):
+                nova_producao["altura_cuba"] = self.ent_altura.get().strip()
+                nova_producao["percentagem_po_novo"] = self.ent_perc.get().strip()
+                nova_producao["lote_po"] = self.ent_lote.get().strip()
+                nova_producao["checklist_seguranca"] = {k: v.get() for k, v in self.sls_vars.items()}
 
         producoes.append(nova_producao)
         JSONManager.salvar(producoes, caminho_producoes)
@@ -337,18 +344,46 @@ class ProducaoTab:
             for p in pedidos:
                 if p.get("id", p.get("id_pedido")) in self.pedidos_vinculados:
                     p["estado"] = "Em Andamento"
-                    if "status" in p:  # Caso uses a key "status" no teu JSON
+                    if "status" in p:  
                         p["status"] = "Em Andamento"
                     modificado = True
             
             if modificado:
                 JSONManager.salvar(pedidos, caminho_pedidos)
 
-        messagebox.showinfo("Sucesso", f"Produção #{novo_id} iniciada com sucesso na máquina {maq}!\n\nPedidos atualizados para 'Em Andamento'.")
+        messagebox.showinfo("Sucesso", f"Produção #{novo_id} iniciada com sucesso na máquina {maq}!\n\nDados guardados em producao_i3D.json.")
         
-        # 5. LIMPAR O FORMULÁRIO (Voltar a pôr FDM como padrão ou limpar a tech atual)
+        # 5. LIMPAR O FORMULÁRIO
         self.ao_mudar_tecnologia(tech)
         self.ent_tempo.delete(0, 'end')
         if hasattr(self, 'ent_quant'): self.ent_quant.delete(0, 'end')
         if hasattr(self, 'ent_altura'): self.ent_altura.delete(0, 'end')
         if hasattr(self, 'ent_perc'): self.ent_perc.delete(0, 'end')
+        if hasattr(self, 'ent_lote'): self.ent_lote.delete(0, 'end')
+
+    def preencher_lote_anterior(self):
+        """ Vai buscar o último lote de SLS registado no producao_i3D.json """
+        if self.chk_var_lote.get():
+            import os
+            from database.json_manager import JSONManager
+            
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            caminho_producoes = os.path.join(base_dir, "data", "producao_i3D.json")
+            
+            if os.path.exists(caminho_producoes):
+                producoes = JSONManager.carregar(caminho_producoes)
+                # Filtra apenas produções SLS que tenham um lote preenchido
+                lotes_sls = [p.get("lote_po") for p in producoes if p.get("tecnologia") == "SLS" and p.get("lote_po")]
+                
+                if lotes_sls:
+                    ultimo_lote = lotes_sls[-1] # O último da lista
+                    self.ent_lote.delete(0, 'end')
+                    self.ent_lote.insert(0, ultimo_lote)
+                    return
+            
+            # Se falhar ou não encontrar histórico
+            self.chk_var_lote.set(False)
+            messagebox.showinfo("Info", "Nenhum registo de lote de pó anterior encontrado.")
+        else:
+            # Limpa o campo se o utilizador desmarcar a caixa
+            self.ent_lote.delete(0, 'end')
