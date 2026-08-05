@@ -6,6 +6,7 @@ from database.json_manager import JSONManager
 from services.pedido_service import PedidoService
 from services.producao_service import ProducaoService
 from config.paths import ARQUIVO_LOGS, ARQUIVO_PEDIDOS, ARQUIVO_MAQUINAS
+from gui import theme
 
 class ProducaoTab:
     def __init__(self, parent_frame, f_padrao, f_titulo, master_app=None):
@@ -13,10 +14,10 @@ class ProducaoTab:
         self.f_padrao = f_padrao
         self.f_titulo = f_titulo
         self.master_app = master_app
-        
+
         # 1. Variáveis de estado
         self.pedidos_vinculados = []
-        self.parent.configure(fg_color="#f0f2f5") 
+        self.parent.configure(fg_color=theme.BG)
 
         # 2. Construir Interface
         self.construir_layout()
@@ -24,92 +25,99 @@ class ProducaoTab:
         # 3. Disparar estado inicial (que chama o atualizar_combos automaticamente)
         self.ao_mudar_tecnologia("FDM")
 
+    def _lbl_campo(self, parent, texto, row):
+        ctk.CTkLabel(parent, text=texto.upper(), font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).grid(row=row, column=0, padx=15, pady=10, sticky="e")
+
     def construir_layout(self):
-        frm = ctk.CTkFrame(self.parent, fg_color="white", corner_radius=12, border_width=1, border_color="#e0e0e0")
-        frm.pack(fill="both", expand=True, padx=20, pady=20)
+        theme.page_header(self.parent, "Chão de Fábrica", "Nova Produção").pack(fill="x", padx=24, pady=(22, 10))
+
+        frm = ctk.CTkFrame(self.parent, fg_color=theme.SURFACE, corner_radius=theme.RADIUS_M, border_width=1, border_color=theme.BORDER)
+        frm.pack(fill="both", expand=True, padx=24, pady=(0, 18))
         frm.columnconfigure(1, weight=1)
 
         # 0. Tecnologia AM
-        ctk.CTkLabel(frm, text="Tecnologia AM:", font=self.f_padrao, text_color="gray30").grid(row=0, column=0, padx=15, pady=10, sticky="e")
-        self.cmb_tech = ctk.CTkComboBox(frm, values=["FDM", "SLA", "SLS"], width=250, font=self.f_padrao, fg_color="white", border_color="gray80", text_color="black", button_color="#1f538d", state="readonly", command=self.ao_mudar_tecnologia)
+        self._lbl_campo(frm, "Tecnologia AM", 0)
+        self.cmb_tech = theme.combobox(frm, values=["FDM", "SLA", "SLS"], width=250, font=self.f_padrao, state="readonly", command=self.ao_mudar_tecnologia)
         self.cmb_tech.grid(row=0, column=1, padx=15, pady=10, sticky="w")
 
         # 1. Vincular Pedidos Abertos (N:N)
-        ctk.CTkLabel(frm, text="Vincular Pedido(s):", font=self.f_padrao, text_color="gray30").grid(row=1, column=0, padx=15, pady=10, sticky="e")
-        
+        self._lbl_campo(frm, "Vincular Pedido(s)", 1)
+
         frm_pedidos_vinc = ctk.CTkFrame(frm, fg_color="transparent")
         frm_pedidos_vinc.grid(row=1, column=1, columnspan=2, padx=15, pady=10, sticky="ew")
 
-        self.ent_pedidos_sel = ctk.CTkEntry(frm_pedidos_vinc, font=self.f_padrao, fg_color="#f0f2f5", border_color="gray80", text_color="black")
+        self.ent_pedidos_sel = theme.entry(frm_pedidos_vinc, font=self.f_padrao)
         self.ent_pedidos_sel.insert(0, "Nenhum pedido selecionado")
         self.ent_pedidos_sel.configure(state="readonly")
         self.ent_pedidos_sel.pack(side="left", fill="x", expand=True, padx=(0, 10))
 
-        ctk.CTkButton(frm_pedidos_vinc, text="📋 Selecionar Pedidos", width=160, fg_color="#1f538d", hover_color="#143a63", text_color="white", font=self.f_padrao, command=self.abrir_pop_up_selecao_pedidos).pack(side="right")
+        theme.button_ghost(frm_pedidos_vinc, text="📋 Selecionar Pedidos", width=160, command=self.abrir_pop_up_selecao_pedidos).pack(side="right")
 
         # 2. Máquina Destino
-        ctk.CTkLabel(frm, text="Máquina Destino:", font=self.f_padrao, text_color="gray30").grid(row=2, column=0, padx=15, pady=10, sticky="e")
-        self.cmb_maq = ctk.CTkComboBox(frm, values=["A carregar..."], width=250, font=self.f_padrao, fg_color="white", border_color="gray80", text_color="black", button_color="#1f538d", state="readonly")
+        self._lbl_campo(frm, "Máquina Destino", 2)
+        self.cmb_maq = theme.combobox(frm, values=["A carregar..."], width=250, font=self.f_padrao, state="readonly")
         self.cmb_maq.grid(row=2, column=1, padx=15, pady=10, sticky="w")
 
         # 3. Tempo Máquina
-        ctk.CTkLabel(frm, text="Tempo Máquina (HH:MM):", font=self.f_padrao, text_color="gray30").grid(row=3, column=0, padx=15, pady=10, sticky="e")
-        self.ent_tempo = ctk.CTkEntry(frm, placeholder_text="02:30", font=self.f_padrao, fg_color="white", border_color="gray80", text_color="black", width=250)
+        self._lbl_campo(frm, "Tempo Máquina (HH:MM)", 3)
+        self.ent_tempo = theme.entry(frm, placeholder_text="02:30", font=theme.font_mono(13), width=250)
         self.ent_tempo.grid(row=3, column=1, padx=15, pady=10, sticky="w")
         self.ent_tempo.bind("<KeyRelease>", lambda e: self.mascara_tempo(e, self.ent_tempo))
 
         # --- CAMPOS DINÂMICOS DE CONSUMO ---
-        self.lbl_quant = ctk.CTkLabel(frm, text="Quantidade (g/ml):", font=self.f_padrao, text_color="gray30")
-        self.ent_quant = ctk.CTkEntry(frm, placeholder_text="150.5", font=self.f_padrao, fg_color="white", border_color="gray80", text_color="black", width=250)
-        
-        self.lbl_altura = ctk.CTkLabel(frm, text="Altura da Cuba (mm):", font=self.f_padrao, text_color="gray30")
-        self.ent_altura = ctk.CTkEntry(frm, placeholder_text="470", font=self.f_padrao, fg_color="white", border_color="gray80", text_color="black", width=250)
-        
-        self.lbl_perc = ctk.CTkLabel(frm, text="% de Pó Novo:", font=self.f_padrao, text_color="gray30")
-        self.ent_perc = ctk.CTkEntry(frm, placeholder_text="0.3", font=self.f_padrao, fg_color="white", border_color="gray80", text_color="black", width=250)
+        self.lbl_quant = ctk.CTkLabel(frm, text="QUANTIDADE (G/ML)", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED)
+        self.ent_quant = theme.entry(frm, placeholder_text="150.5", font=theme.font_mono(13), width=250)
+
+        self.lbl_altura = ctk.CTkLabel(frm, text="ALTURA DA CUBA (MM)", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED)
+        self.ent_altura = theme.entry(frm, placeholder_text="470", font=theme.font_mono(13), width=250)
+
+        self.lbl_perc = ctk.CTkLabel(frm, text="% DE PÓ NOVO", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED)
+        self.ent_perc = theme.entry(frm, placeholder_text="0.3", font=theme.font_mono(13), width=250)
 
         # ====================================================
         # --- BLOCOS DE CHECKLISTS POR TECNOLOGIA ---
         # ====================================================
 
+        checkbox_kwargs = dict(fg_color=theme.ACCENT, hover_color=theme.ACCENT_HOVER, checkmark_color=theme.WHITE, border_color=theme.TEXT_MUTED, text_color=theme.TEXT)
+
         # 1. BLOCO EXCLUSIVO FDM
-        self.frm_fdm_checklist = ctk.CTkFrame(frm, fg_color="#f8f9fa", corner_radius=10, border_width=1, border_color="#e0e0e0")
-        ctk.CTkLabel(self.frm_fdm_checklist, text="⚙️ Checklist Crítico FDM", font=("Arial", 12, "bold"), text_color="#1f538d").grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(10, 5))
-        
+        self.frm_fdm_checklist = ctk.CTkFrame(frm, fg_color=theme.SURFACE_ALT, corner_radius=theme.RADIUS_M, border_width=1, border_color=theme.BORDER)
+        ctk.CTkLabel(self.frm_fdm_checklist, text="⚙️ Checklist Crítico FDM", font=theme.font_body(12, "bold"), text_color=theme.TEAL).grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(10, 5))
+
         self.fdm_vars = {
-            "nivelamento_mesa": tk.BooleanVar(value=False), 
-            "analise_gcode": tk.BooleanVar(value=False), 
+            "nivelamento_mesa": tk.BooleanVar(value=False),
+            "analise_gcode": tk.BooleanVar(value=False),
             "qualidade_filamento": tk.BooleanVar(value=False)
         }
-        
-        ctk.CTkCheckBox(self.frm_fdm_checklist, text="NIVELAMENTO DA MESA", font=("Arial", 11), variable=self.fdm_vars["nivelamento_mesa"]).grid(row=1, column=0, padx=15, pady=10, sticky="w")
-        ctk.CTkCheckBox(self.frm_fdm_checklist, text="ANÁLISE GCODE", font=("Arial", 11), variable=self.fdm_vars["analise_gcode"]).grid(row=1, column=1, padx=15, pady=10, sticky="w")
-        ctk.CTkCheckBox(self.frm_fdm_checklist, text="QUALIDADE DO FILAMENTO", font=("Arial", 11), variable=self.fdm_vars["qualidade_filamento"]).grid(row=1, column=2, padx=15, pady=10, sticky="w")
+
+        ctk.CTkCheckBox(self.frm_fdm_checklist, text="NIVELAMENTO DA MESA", font=theme.font_body(11), variable=self.fdm_vars["nivelamento_mesa"], **checkbox_kwargs).grid(row=1, column=0, padx=15, pady=10, sticky="w")
+        ctk.CTkCheckBox(self.frm_fdm_checklist, text="ANÁLISE GCODE", font=theme.font_body(11), variable=self.fdm_vars["analise_gcode"], **checkbox_kwargs).grid(row=1, column=1, padx=15, pady=10, sticky="w")
+        ctk.CTkCheckBox(self.frm_fdm_checklist, text="QUALIDADE DO FILAMENTO", font=theme.font_body(11), variable=self.fdm_vars["qualidade_filamento"], **checkbox_kwargs).grid(row=1, column=2, padx=15, pady=10, sticky="w")
 
         # 2. BLOCO EXCLUSIVO SLA
-        self.frm_sla_checklist = ctk.CTkFrame(frm, fg_color="#f8f9fa", corner_radius=10, border_width=1, border_color="#e0e0e0")
-        ctk.CTkLabel(self.frm_sla_checklist, text="⚙️ Checklist Crítico SLA", font=("Arial", 12, "bold"), text_color="#1f538d").grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(10, 5))
-        
+        self.frm_sla_checklist = ctk.CTkFrame(frm, fg_color=theme.SURFACE_ALT, corner_radius=theme.RADIUS_M, border_width=1, border_color=theme.BORDER)
+        ctk.CTkLabel(self.frm_sla_checklist, text="⚙️ Checklist Crítico SLA", font=theme.font_body(12, "bold"), text_color=theme.TEAL).grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(10, 5))
+
         self.sla_vars = {
-            "limpeza_tanque": tk.BooleanVar(value=False), 
-            "limpeza_mesa": tk.BooleanVar(value=False), 
+            "limpeza_tanque": tk.BooleanVar(value=False),
+            "limpeza_mesa": tk.BooleanVar(value=False),
             "qualidade_resina": tk.BooleanVar(value=False)
         }
-        
-        ctk.CTkCheckBox(self.frm_sla_checklist, text="LIMPEZA DO TANQUE", font=("Arial", 11), variable=self.sla_vars["limpeza_tanque"]).grid(row=1, column=0, padx=15, pady=10, sticky="w")
-        ctk.CTkCheckBox(self.frm_sla_checklist, text="LIMPEZA DA MESA", font=("Arial", 11), variable=self.sla_vars["limpeza_mesa"]).grid(row=1, column=1, padx=15, pady=10, sticky="w")
-        ctk.CTkCheckBox(self.frm_sla_checklist, text="QUALIDADE DA RESINA", font=("Arial", 11), variable=self.sla_vars["qualidade_resina"]).grid(row=1, column=2, padx=15, pady=10, sticky="w")
+
+        ctk.CTkCheckBox(self.frm_sla_checklist, text="LIMPEZA DO TANQUE", font=theme.font_body(11), variable=self.sla_vars["limpeza_tanque"], **checkbox_kwargs).grid(row=1, column=0, padx=15, pady=10, sticky="w")
+        ctk.CTkCheckBox(self.frm_sla_checklist, text="LIMPEZA DA MESA", font=theme.font_body(11), variable=self.sla_vars["limpeza_mesa"], **checkbox_kwargs).grid(row=1, column=1, padx=15, pady=10, sticky="w")
+        ctk.CTkCheckBox(self.frm_sla_checklist, text="QUALIDADE DA RESINA", font=theme.font_body(11), variable=self.sla_vars["qualidade_resina"], **checkbox_kwargs).grid(row=1, column=2, padx=15, pady=10, sticky="w")
 
         # 3. BLOCO EXCLUSIVO SLS
-        self.frm_sls_checklist = ctk.CTkFrame(frm, fg_color="#f8f9fa", corner_radius=10, border_width=1, border_color="#e0e0e0")
-        ctk.CTkLabel(self.frm_sls_checklist, text="⚙️ Parâmetros Básicos e Checklist Crítico SLS", font=("Arial", 12, "bold"), text_color="#1f538d").grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(10, 5))
+        self.frm_sls_checklist = ctk.CTkFrame(frm, fg_color=theme.SURFACE_ALT, corner_radius=theme.RADIUS_M, border_width=1, border_color=theme.BORDER)
+        ctk.CTkLabel(self.frm_sls_checklist, text="⚙️ Parâmetros Básicos e Checklist Crítico SLS", font=theme.font_body(12, "bold"), text_color=theme.TEAL).grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(10, 5))
 
         self.chk_var_lote = tk.BooleanVar(value=False)
-        self.chk_lote = ctk.CTkCheckBox(self.frm_sls_checklist, text="Mesmo lote da produção anterior?", font=("Arial", 11, "bold"), variable=self.chk_var_lote, command=self.preencher_lote_anterior)
-        self.chk_lote.grid(row=1, column=0, columnspan=3, padx=15, pady=(5, 10), sticky="w") 
+        self.chk_lote = ctk.CTkCheckBox(self.frm_sls_checklist, text="Mesmo lote da produção anterior?", font=theme.font_body(11, "bold"), variable=self.chk_var_lote, command=self.preencher_lote_anterior, **checkbox_kwargs)
+        self.chk_lote.grid(row=1, column=0, columnspan=3, padx=15, pady=(5, 10), sticky="w")
 
-        ctk.CTkLabel(self.frm_sls_checklist, text="Lote do Pó:", font=self.f_padrao, text_color="gray30").grid(row=2, column=0, padx=15, pady=5, sticky="w")
-        self.ent_lote = ctk.CTkEntry(self.frm_sls_checklist, width=200, fg_color="white", border_color="gray80", text_color="black")
+        ctk.CTkLabel(self.frm_sls_checklist, text="LOTE DO PÓ", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).grid(row=2, column=0, padx=15, pady=5, sticky="w")
+        self.ent_lote = theme.entry(self.frm_sls_checklist, width=200, font=theme.font_mono(12))
         self.ent_lote.grid(row=2, column=1, columnspan=2, padx=5, pady=5, sticky="w")
 
         self.sls_vars = {
@@ -125,10 +133,10 @@ class ProducaoTab:
         ]
 
         for text, key, row, col in checks_config_sls:
-            ctk.CTkCheckBox(self.frm_sls_checklist, text=text, font=("Arial", 11), variable=self.sls_vars[key]).grid(row=row, column=col, padx=15, pady=6, sticky="w")
+            ctk.CTkCheckBox(self.frm_sls_checklist, text=text, font=theme.font_body(11), variable=self.sls_vars[key], **checkbox_kwargs).grid(row=row, column=col, padx=15, pady=6, sticky="w")
 
         # Botão Guardar
-        self.btn_salvar = ctk.CTkButton(frm, text="🚀 INICIAR FABRICO", fg_color="#28a745", hover_color="#218838", height=45, font=self.f_titulo, command=self.gravar_producao)
+        self.btn_salvar = theme.button_action(frm, text="🚀 INICIAR FABRICO", height=45, font=self.f_titulo, command=self.gravar_producao)
 
     def preencher_lote_anterior(self):
         if self.chk_var_lote.get():
@@ -147,7 +155,10 @@ class ProducaoTab:
             self.ent_lote.delete(0, 'end')
 
     def ao_mudar_tecnologia(self, escolha=None):
-        tech_atual = self.cmb_tech.get()
+        # Usa o valor recebido quando disponível: no arranque, self.cmb_tech ainda não
+        # foi ".set()" pelo utilizador, por isso `.get()` devolveria vazio nesse caso.
+        tech_atual = escolha or self.cmb_tech.get()
+        self.cmb_tech.set(tech_atual)
 
         # 1. Reset dos pedidos vinculados
         self.pedidos_vinculados = []
@@ -247,14 +258,14 @@ class ProducaoTab:
         top = ctk.CTkToplevel(self.parent.winfo_toplevel())
         top.title(f"Selecionar Pedidos ({tech_atual})")
         top.geometry("600x480")
-        top.configure(fg_color="#fcfcfc")
+        top.configure(fg_color=theme.BG)
         top.transient(self.parent.winfo_toplevel())
         top.grab_set()
 
-        ctk.CTkLabel(top, text=f"Pedidos Abertos ({tech_atual}):", font=("Arial", 13, "bold"), text_color="#1f538d").pack(pady=(15, 5))
-        ctk.CTkLabel(top, text="Nota: Só é possível agrupar pedidos do mesmo material.", font=("Arial", 10, "italic"), text_color="gray40").pack(pady=(0, 10))
+        ctk.CTkLabel(top, text=f"Pedidos Abertos ({tech_atual}):", font=theme.font_body(13, "bold"), text_color=theme.ACCENT).pack(pady=(15, 5))
+        ctk.CTkLabel(top, text="Nota: Só é possível agrupar pedidos do mesmo material.", font=theme.font_body(10), text_color=theme.TEXT_MUTED).pack(pady=(0, 10))
 
-        scroll_frame = ctk.CTkScrollableFrame(top, fg_color="white", border_width=1, border_color="#e0e0e0", corner_radius=8)
+        scroll_frame = ctk.CTkScrollableFrame(top, fg_color=theme.SURFACE, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_M)
         scroll_frame.pack(fill="both", expand=True, padx=20, pady=(0, 15))
 
         self.dict_checks_pedidos = []
@@ -274,13 +285,13 @@ class ProducaoTab:
 
             for item in self.dict_checks_pedidos:
                 if not mats_ativos:
-                    item["widget"].configure(state="normal", text_color="black")
+                    item["widget"].configure(state="normal", text_color=theme.TEXT)
                 else:
                     if any(m in mats_ativos for m in item["materiais"]):
-                        item["widget"].configure(state="normal", text_color="black")
+                        item["widget"].configure(state="normal", text_color=theme.TEXT)
                     else:
                         item["var"].set(False)
-                        item["widget"].configure(state="disabled", text_color="gray60")
+                        item["widget"].configure(state="disabled", text_color=theme.TEXT_MUTED)
 
         for p in pedidos_compativeis:
             id_p = p.get("id")
@@ -291,7 +302,9 @@ class ProducaoTab:
             label_text = f"ID #{id_p} | Proj: {nr_proj} | Mat: {mat_str}"
 
             var = tk.BooleanVar(value=(id_p in ids_ja_selecionados))
-            chk = ctk.CTkCheckBox(scroll_frame, text=label_text, variable=var, font=("Arial", 11), command=reavaliar_bloqueio_materiais)
+            chk = ctk.CTkCheckBox(scroll_frame, text=label_text, variable=var, font=theme.font_body(11),
+                                   fg_color=theme.ACCENT, hover_color=theme.ACCENT_HOVER, checkmark_color=theme.WHITE,
+                                   border_color=theme.TEXT_MUTED, command=reavaliar_bloqueio_materiais)
             chk.pack(anchor="w", padx=15, pady=8)
 
             self.dict_checks_pedidos.append({"id": id_p, "var": var, "widget": chk, "materiais": mats, "objeto": p})
@@ -314,7 +327,7 @@ class ProducaoTab:
             self.ent_pedidos_sel.configure(state="readonly")
             top.destroy()
 
-        ctk.CTkButton(top, text="CONFIRMAR SELEÇÃO", fg_color="#28a745", hover_color="#218838", font=("Arial", 12, "bold"), height=40, command=confirmar_selecao).pack(fill="x", padx=20, pady=15)
+        theme.button_action(top, text="CONFIRMAR SELEÇÃO", font=theme.font_body(12, "bold"), height=40, command=confirmar_selecao).pack(fill="x", padx=20, pady=15)
 
     def mascara_tempo(self, event, entry):
         val = entry.get().replace(":", "")
