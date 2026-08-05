@@ -1,7 +1,7 @@
 import io
+from urllib.parse import urlparse
 import urllib.request
 from PIL import Image, ImageTk
-import customtkinter as ctk
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox
@@ -65,22 +65,25 @@ class ParqueTab:
             card.grid(row=row, column=col, padx=10, pady=10, sticky="ew")
 
             # --- RENDERIZAR MINIATURA POR URL ---
-            if url_imagem:
+            if url_imagem and urlparse(url_imagem).scheme in ("http", "https"):
                 try:
                     # Faz o download dos bytes da imagem em memória
                     with urllib.request.urlopen(url_imagem, timeout=3) as url_response:
                         img_data = url_response.read()
-                    
+
                     # Processa a imagem com o Pillow e redimensiona para tamanho miniatura (ex: 120x120)
                     img_original = Image.open(io.BytesIO(img_data))
                     ctk_img = ctk.CTkImage(light_image=img_original, dark_image=img_original, size=(120, 120))
-                    
+
                     lbl_img = ctk.CTkLabel(card, image=ctk_img, text="")
                     lbl_img.pack(pady=(15, 5))
                 except Exception as e:
                     # Se o URL falhar ou o PC estiver sem rede, mostra um aviso visual discreto em vez de quebrar o app
                     lbl_img_erro = ctk.CTkLabel(card, text="🖼️ Erro ao carregar imagem", font=("Arial", 10, "italic"), text_color="gray")
                     lbl_img_erro.pack(pady=(15, 5))
+            elif url_imagem:
+                lbl_img_erro = ctk.CTkLabel(card, text="🖼️ URL de imagem inválido", font=("Arial", 10, "italic"), text_color="gray")
+                lbl_img_erro.pack(pady=(15, 5))
 
             # --- TAG DE STATUS ---
             lbl_status = ctk.CTkLabel(card, text=estado.upper(), font=ctk.CTkFont(size=10, weight="bold"), text_color=cor_status, fg_color=bg_status_light, corner_radius=6)
