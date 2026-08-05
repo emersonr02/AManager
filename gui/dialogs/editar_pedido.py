@@ -15,7 +15,7 @@ class JanelaEditarPedido(ctk.CTkToplevel):
         self.pedido = pedido
         self.callback_atualizar = callback_atualizar
 
-        self.title(f"Editar Pedido #{self.pedido.get('id')}")
+        self.title(f"Editar Pedido #{PedidoService.formatar_codigo(self.pedido.get('id'))}")
         self.geometry("820x820")
         self.configure(fg_color=theme.BG)
         self.resizable(False, False)
@@ -42,7 +42,7 @@ class JanelaEditarPedido(ctk.CTkToplevel):
             self.lista_materiais_fmt = ["N/A"]
 
     def construir_layout(self):
-        ctk.CTkLabel(self, text=f"Editar Pedido #{self.pedido.get('id')}", font=theme.font_display(18), text_color=theme.ACCENT).pack(pady=(15, 5))
+        ctk.CTkLabel(self, text=f"Editar Pedido #{PedidoService.formatar_codigo(self.pedido.get('id'))}", font=theme.font_display(18), text_color=theme.ACCENT).pack(pady=(15, 5))
 
         # --- CABEÇALHO DO PEDIDO ---
         frm_master = ctk.CTkFrame(self, fg_color=theme.SURFACE, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_M)

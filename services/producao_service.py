@@ -1,7 +1,24 @@
 import re
 
 class ProducaoService:
-    
+
+    @staticmethod
+    def formatar_codigo(id_producao) -> str:
+        """Código profissional para mostrar ao utilizador (ex: PRD000012).
+        O id interno (inteiro, usado em todas as ligações/joins) não muda."""
+        try:
+            return f"PRD{int(id_producao):06d}"
+        except (TypeError, ValueError):
+            return str(id_producao)
+
+    @staticmethod
+    def extrair_id(codigo):
+        """Inverso de formatar_codigo — aceita 'PRD000012', '12' ou já um int."""
+        if isinstance(codigo, int):
+            return codigo
+        digitos = re.sub(r"\D", "", str(codigo))
+        return int(digitos) if digitos else None
+
     @staticmethod
     def validar_formato_tempo(tempo_str: str) -> bool:
         """Valida se a string está no formato exato HH:MM"""

@@ -5,6 +5,7 @@ import os
 from database.json_manager import JSONManager
 from config.paths import ARQUIVO_PEDIDOS
 from services.producao_service import ProducaoService
+from services.pedido_service import PedidoService
 from services.nc_service import NCService
 from gui import theme
 
@@ -14,9 +15,9 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         self.log = log_data
         self.callback_salvar = callback_salvar
 
-        id_ordem = self.log.get('id', '')
+        codigo_ordem = ProducaoService.formatar_codigo(self.log.get('id', ''))
 
-        self.title(f"Tratamento e Fecho - Ordem #{id_ordem}")
+        self.title(f"Tratamento e Fecho - Ordem #{codigo_ordem}")
         # Aumentada a altura da janela para garantir que o botão aparece perfeitamente
         self.geometry("520x800")
         self.configure(fg_color=theme.BG)
@@ -36,7 +37,7 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         
         # 1. Formatar os IDs dos pedidos (Substituindo o Projeto)
         if vinculos:
-            self.pedidos_fmt = ", ".join([f"#{v}" for v in vinculos])
+            self.pedidos_fmt = ", ".join(PedidoService.formatar_codigo(v) for v in vinculos)
             
             # Aproveitar para extrair materiais diretamente dos pedidos vinculados
             for p in pedidos_db:
@@ -53,6 +54,7 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         self.maquina = self.log.get("maquina", "N/A")
         self.tecnologia = self.log.get("tecnologia", "FDM")
         self.tempo_est = self.log.get("tempo_estimado", self.log.get("tempo", "00:00"))
+        self.responsavel = self.log.get("operador", "N/A")
         
         # 3. Lógica de Quantidades e SLS
         if self.tecnologia == "SLS":
@@ -82,8 +84,8 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
             self.qtd_est = str(self.qtd_raw)
 
     def construir_layout(self):
-        id_ordem = self.log.get('id', '')
-        ctk.CTkLabel(self, text=f"Tratamento e Fecho - Ordem #{id_ordem}", font=theme.font_display(16), text_color=theme.ACCENT).pack(pady=(20, 10))
+        codigo_ordem = ProducaoService.formatar_codigo(self.log.get('id', ''))
+        ctk.CTkLabel(self, text=f"Tratamento e Fecho - Ordem #{codigo_ordem}", font=theme.font_display(16), text_color=theme.ACCENT).pack(pady=(20, 10))
 
         # --- RESUMO DO PLANEAMENTO ---
         frm_resumo = ctk.CTkFrame(self, fg_color=theme.SURFACE_ALT, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_M)
@@ -92,7 +94,7 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         ctk.CTkLabel(frm_resumo, text="RESUMO DO PLANEAMENTO", font=theme.font_eyebrow(10), text_color=theme.TEAL).pack(anchor="w", padx=15, pady=(10, 5))
 
         # Agora apresenta os Pedidos em vez do Projeto
-        info_texto = f"Máquina: {self.maquina} | Pedidos: {self.pedidos_fmt}\nMaterial: {self.material_fmt} | Tecnologia: {self.tecnologia}\nTempo Est.: {self.tempo_est} | Qtd Est.: {self.qtd_est} g/ml"
+        info_texto = f"Máquina: {self.maquina} | Pedidos: {self.pedidos_fmt}\nMaterial: {self.material_fmt} | Tecnologia: {self.tecnologia}\nTempo Est.: {self.tempo_est} | Qtd Est.: {self.qtd_est} g/ml\nResponsável: {self.responsavel}"
         ctk.CTkLabel(frm_resumo, text=info_texto, font=theme.font_mono(11), text_color=theme.TEXT, justify="left").pack(anchor="w", padx=15, pady=(0, 10))
 
         # --- APONTAMENTO REAL ---
