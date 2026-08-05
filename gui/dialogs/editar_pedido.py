@@ -7,16 +7,17 @@ from database.json_manager import JSONManager
 from services.pedido_service import PedidoService
 from services.projeto_service import ProjetoService
 from services.material_service import MaterialService
+from gui import theme
 
 class JanelaEditarPedido(ctk.CTkToplevel):
     def __init__(self, parent, pedido, callback_atualizar):
         super().__init__(parent)
         self.pedido = pedido
         self.callback_atualizar = callback_atualizar
-        
+
         self.title(f"Editar Pedido #{self.pedido.get('id')}")
         self.geometry("820x820")
-        self.configure(fg_color="#fcfcfc")
+        self.configure(fg_color=theme.BG)
         self.resizable(False, False)
         
         self.transient(parent)
@@ -41,52 +42,52 @@ class JanelaEditarPedido(ctk.CTkToplevel):
             self.lista_materiais_fmt = ["N/A"]
 
     def construir_layout(self):
-        ctk.CTkLabel(self, text=f"Editar Pedido #{self.pedido.get('id')}", font=("Arial", 18, "bold"), text_color="#1f538d").pack(pady=(15, 5))
+        ctk.CTkLabel(self, text=f"Editar Pedido #{self.pedido.get('id')}", font=theme.font_display(18), text_color=theme.ACCENT).pack(pady=(15, 5))
 
         # --- CABEÇALHO DO PEDIDO ---
-        frm_master = ctk.CTkFrame(self, fg_color="white", border_width=1, border_color="#e0e0e0", corner_radius=8)
+        frm_master = ctk.CTkFrame(self, fg_color=theme.SURFACE, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_M)
         frm_master.pack(fill="x", padx=20, pady=10)
 
         # Linha 1
-        ctk.CTkLabel(frm_master, text="Requerente (Email):", font=("Arial", 11, "bold"), text_color="gray40").grid(row=0, column=0, padx=10, pady=(15, 5), sticky="w")
-        self.ent_req = ctk.CTkEntry(frm_master, width=220, fg_color="#f0f2f5", text_color="black")
+        ctk.CTkLabel(frm_master, text="REQUERENTE (EMAIL)", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).grid(row=0, column=0, padx=10, pady=(15, 5), sticky="w")
+        self.ent_req = theme.entry(frm_master, width=220)
         self.ent_req.grid(row=0, column=1, padx=10, pady=(15, 5), sticky="w")
 
-        ctk.CTkLabel(frm_master, text="Data de Entrega:", font=("Arial", 11, "bold"), text_color="gray40").grid(row=0, column=2, padx=10, pady=(15, 5), sticky="w")
-        self.ent_data = ctk.CTkEntry(frm_master, width=150, fg_color="#f0f2f5", text_color="black")
+        ctk.CTkLabel(frm_master, text="DATA DE ENTREGA", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).grid(row=0, column=2, padx=10, pady=(15, 5), sticky="w")
+        self.ent_data = theme.entry(frm_master, width=150, font=theme.font_mono(12))
         self.ent_data.grid(row=0, column=3, padx=10, pady=(15, 5), sticky="w")
 
         # Linha 2
-        ctk.CTkLabel(frm_master, text="Projeto (ID - Nome):", font=("Arial", 11, "bold"), text_color="gray40").grid(row=1, column=0, padx=10, pady=5, sticky="w")
-        self.cmb_proj = ctk.CTkComboBox(frm_master, values=self.lista_projetos_fmt, width=220, fg_color="#f0f2f5", text_color="black", state="readonly")
+        ctk.CTkLabel(frm_master, text="PROJETO (ID - NOME)", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).grid(row=1, column=0, padx=10, pady=5, sticky="w")
+        self.cmb_proj = theme.combobox(frm_master, values=self.lista_projetos_fmt, width=220, state="readonly")
         self.cmb_proj.grid(row=1, column=1, padx=10, pady=5, sticky="w")
 
-        ctk.CTkLabel(frm_master, text="Tecnologia Base:", font=("Arial", 11, "bold"), text_color="gray40").grid(row=1, column=2, padx=10, pady=5, sticky="w")
-        self.cmb_tech = ctk.CTkComboBox(frm_master, values=["FDM", "SLA", "SLS"], width=150, fg_color="#f0f2f5", text_color="black", state="readonly")
+        ctk.CTkLabel(frm_master, text="TECNOLOGIA BASE", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).grid(row=1, column=2, padx=10, pady=5, sticky="w")
+        self.cmb_tech = theme.combobox(frm_master, values=["FDM", "SLA", "SLS"], width=150, state="readonly")
         self.cmb_tech.grid(row=1, column=3, padx=10, pady=5, sticky="w")
 
         # Linha 3
-        ctk.CTkLabel(frm_master, text="Link / Pasta (Rede):", font=("Arial", 11, "bold"), text_color="gray40").grid(row=2, column=0, padx=10, pady=5, sticky="w")
-        self.ent_link = ctk.CTkEntry(frm_master, width=490, fg_color="#f0f2f5", text_color="black")
+        ctk.CTkLabel(frm_master, text="LINK / PASTA (REDE)", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).grid(row=2, column=0, padx=10, pady=5, sticky="w")
+        self.ent_link = theme.entry(frm_master, width=490)
         self.ent_link.grid(row=2, column=1, columnspan=3, padx=10, pady=5, sticky="w")
 
         # Linha 4
-        ctk.CTkLabel(frm_master, text="Observações:", font=("Arial", 11, "bold"), text_color="gray40").grid(row=3, column=0, padx=10, pady=(5, 15), sticky="nw")
-        self.txt_obs = ctk.CTkTextbox(frm_master, width=490, height=50, fg_color="#f0f2f5", text_color="black")
+        ctk.CTkLabel(frm_master, text="OBSERVAÇÕES", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).grid(row=3, column=0, padx=10, pady=(5, 15), sticky="nw")
+        self.txt_obs = ctk.CTkTextbox(frm_master, width=490, height=50, fg_color=theme.SURFACE_ALT, text_color=theme.TEXT, border_color=theme.BORDER, border_width=1)
         self.txt_obs.grid(row=3, column=1, columnspan=3, padx=10, pady=(5, 15), sticky="w")
 
         # --- GRELHA DINÂMICA DE PEÇAS ---
         frm_titulo_pecas = ctk.CTkFrame(self, fg_color="transparent")
         frm_titulo_pecas.pack(fill="x", padx=20, pady=(10, 0))
-        
-        ctk.CTkLabel(frm_titulo_pecas, text="Lista de Peças a Fabricar:", font=("Arial", 13, "bold"), text_color="#1f538d").pack(side="left")
-        ctk.CTkButton(frm_titulo_pecas, text="+ Adicionar Peça", fg_color="#28a745", hover_color="#218838", width=120, height=28, command=self.adicionar_linha_peca).pack(side="right")
 
-        self.frm_scroll_pecas = ctk.CTkScrollableFrame(self, fg_color="#f8f9fa", border_width=1, border_color="#e0e0e0", corner_radius=8, height=220)
+        ctk.CTkLabel(frm_titulo_pecas, text="Lista de Peças a Fabricar", font=theme.font_body(13, "bold"), text_color=theme.ACCENT).pack(side="left")
+        theme.button_action(frm_titulo_pecas, text="+ Adicionar Peça", width=120, height=28, command=self.adicionar_linha_peca).pack(side="right")
+
+        self.frm_scroll_pecas = ctk.CTkScrollableFrame(self, fg_color=theme.SURFACE_ALT, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_M, height=220)
         self.frm_scroll_pecas.pack(fill="x", padx=20, pady=5)
 
         # --- BOTÃO GUARDAR ---
-        self.btn_salvar = ctk.CTkButton(self, text="GUARDAR ALTERAÇÕES", fg_color="#1f538d", hover_color="#143a63", text_color="white", font=("Arial", 13, "bold"), command=self.salvar_alteracoes, height=45)
+        self.btn_salvar = theme.button_primary(self, text="GUARDAR ALTERAÇÕES", font=theme.font_body(13, "bold"), command=self.salvar_alteracoes, height=45)
         self.btn_salvar.pack(fill="x", padx=20, pady=20)
 
     def preencher_dados_existentes(self):
@@ -120,20 +121,20 @@ class JanelaEditarPedido(ctk.CTkToplevel):
         linha_frm = ctk.CTkFrame(self.frm_scroll_pecas, fg_color="transparent")
         linha_frm.pack(fill="x", pady=3)
 
-        ent_pn = ctk.CTkEntry(linha_frm, placeholder_text="Part Number", width=300, fg_color="white", text_color="black")
+        ent_pn = theme.entry(linha_frm, placeholder_text="Part Number", width=300)
         ent_pn.insert(0, pn)
         ent_pn.pack(side="left", padx=(5, 10))
 
-        cmb_mat = ctk.CTkComboBox(linha_frm, values=self.lista_materiais_fmt, width=220, fg_color="white", text_color="black", state="readonly")
+        cmb_mat = theme.combobox(linha_frm, values=self.lista_materiais_fmt, width=220, state="readonly")
         if mat in self.lista_materiais_fmt:
             cmb_mat.set(mat)
         cmb_mat.pack(side="left", padx=(0, 10))
 
-        ent_qtd = ctk.CTkEntry(linha_frm, placeholder_text="Qtd", width=70, fg_color="white", text_color="black")
+        ent_qtd = theme.entry(linha_frm, placeholder_text="Qtd", width=70, font=theme.font_mono(12))
         ent_qtd.insert(0, str(qtd))
         ent_qtd.pack(side="left", padx=(0, 10))
 
-        btn_remover = ctk.CTkButton(linha_frm, text="X", width=30, fg_color="#dc3545", hover_color="#c82333", command=lambda f=linha_frm: self.remover_linha(f))
+        btn_remover = theme.button_danger(linha_frm, text="X", width=30, command=lambda f=linha_frm: self.remover_linha(f))
         btn_remover.pack(side="left")
 
         self.linhas_pecas.append({"frame": linha_frm, "pn": ent_pn, "mat": cmb_mat, "qtd": ent_qtd})
