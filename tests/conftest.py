@@ -1,13 +1,27 @@
 import pytest
 
 from database import json_manager
-from services import pedido_service, maquina_service, nc_service
+from services import pedido_service, maquina_service, nc_service, projeto_service, material_service
 
 
 @pytest.fixture
 def arquivo_pedidos(tmp_path, monkeypatch):
     caminho = tmp_path / "pedidos.json"
     monkeypatch.setattr(pedido_service, "ARQUIVO_PEDIDOS", str(caminho))
+    return str(caminho)
+
+
+@pytest.fixture
+def arquivo_projetos(tmp_path, monkeypatch):
+    caminho = tmp_path / "projetos.json"
+    monkeypatch.setattr(projeto_service, "ARQUIVO_PROJETOS", str(caminho))
+    return str(caminho)
+
+
+@pytest.fixture
+def arquivo_materiais(tmp_path, monkeypatch):
+    caminho = tmp_path / "materiais.json"
+    monkeypatch.setattr(material_service, "ARQUIVO_MATERIAIS", str(caminho))
     return str(caminho)
 
 

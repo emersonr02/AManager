@@ -6,6 +6,7 @@ from database.json_manager import JSONManager
 from config.paths import ARQUIVO_PEDIDOS
 from gui.dialogs.novo_pedido import JanelaNovoPedido
 from gui.dialogs.editar_pedido import JanelaEditarPedido
+from gui.dialogs.gestao_projetos_materiais import JanelaGestaoProjetosMateriais
 
 class PedidosTab:
     def __init__(self, parent_frame, f_padrao, f_titulo, master_app=None):
@@ -26,6 +27,7 @@ class PedidosTab:
         
         ctk.CTkLabel(frm_header, text="Gestão de Pedidos", font=ctk.CTkFont(size=22, weight="bold"), text_color="#1f538d").pack(side="left")
         ctk.CTkButton(frm_header, text="+ Novo Pedido", fg_color="#28a745", hover_color="#218838", text_color="white", font=self.f_padrao, command=self.abrir_novo_pedido).pack(side="right")
+        ctk.CTkButton(frm_header, text="Gerir Projetos / Materiais", fg_color="#e8f0fe", text_color="#1f538d", hover_color="#d2e3fc", font=self.f_padrao, command=self.abrir_gestao_projetos_materiais).pack(side="right", padx=(0, 10))
 
         # 2. CARDS DE KPI
         frm_kpi = ctk.CTkFrame(self.parent, fg_color="transparent")
@@ -122,6 +124,9 @@ class PedidosTab:
 
     def abrir_novo_pedido(self):
         JanelaNovoPedido(self.parent.winfo_toplevel(), self.atualizar_tabela)
+
+    def abrir_gestao_projetos_materiais(self):
+        JanelaGestaoProjetosMateriais(self.parent.winfo_toplevel())
 
     def abrir_edicao(self, event=None):
         sel = self.tree_pedidos.selection()
