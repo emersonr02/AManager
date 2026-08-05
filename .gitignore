@@ -1,3 +1,8 @@
-data/producao_i3D.json
-data/pedidos.json
-data/projetos.json
+__pycache__/
+*.pyc
+*.lock
+data/*.json
+!data/materiais.json
+!data/nc_falhas.json
+!data/acoes_corretivas.json
+!data/parque_maquinas.json
