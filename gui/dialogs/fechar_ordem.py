@@ -6,19 +6,20 @@ from database.json_manager import JSONManager
 from config.paths import ARQUIVO_PEDIDOS
 from services.producao_service import ProducaoService
 from services.nc_service import NCService
+from gui import theme
 
 class JanelaFecharOrdem(ctk.CTkToplevel):
     def __init__(self, parent, log_data, callback_salvar):
         super().__init__(parent)
         self.log = log_data
         self.callback_salvar = callback_salvar
-        
+
         id_ordem = self.log.get('id', '')
-        
+
         self.title(f"Tratamento e Fecho - Ordem #{id_ordem}")
         # Aumentada a altura da janela para garantir que o botão aparece perfeitamente
         self.geometry("520x800")
-        self.configure(fg_color="#fcfcfc")
+        self.configure(fg_color=theme.BG)
         self.resizable(False, False)
         
         self.transient(parent)
@@ -82,30 +83,30 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
 
     def construir_layout(self):
         id_ordem = self.log.get('id', '')
-        ctk.CTkLabel(self, text=f"Tratamento e Fecho - Ordem #{id_ordem}", font=("Arial", 16, "bold"), text_color="#1f538d").pack(pady=(20, 10))
+        ctk.CTkLabel(self, text=f"Tratamento e Fecho - Ordem #{id_ordem}", font=theme.font_display(16), text_color=theme.ACCENT).pack(pady=(20, 10))
 
         # --- RESUMO DO PLANEAMENTO ---
-        frm_resumo = ctk.CTkFrame(self, fg_color="#f8f9fa", border_width=1, border_color="#e0e0e0", corner_radius=8)
+        frm_resumo = ctk.CTkFrame(self, fg_color=theme.SURFACE_ALT, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_M)
         frm_resumo.pack(fill="x", padx=20, pady=10)
-        
-        ctk.CTkLabel(frm_resumo, text="Resumo do Planeamento:", font=("Arial", 12, "bold"), text_color="gray30").pack(anchor="w", padx=15, pady=(10, 5))
-        
+
+        ctk.CTkLabel(frm_resumo, text="RESUMO DO PLANEAMENTO", font=theme.font_eyebrow(10), text_color=theme.TEAL).pack(anchor="w", padx=15, pady=(10, 5))
+
         # Agora apresenta os Pedidos em vez do Projeto
         info_texto = f"Máquina: {self.maquina} | Pedidos: {self.pedidos_fmt}\nMaterial: {self.material_fmt} | Tecnologia: {self.tecnologia}\nTempo Est.: {self.tempo_est} | Qtd Est.: {self.qtd_est} g/ml"
-        ctk.CTkLabel(frm_resumo, text=info_texto, font=("Arial", 11), text_color="black", justify="left").pack(anchor="w", padx=15, pady=(0, 10))
+        ctk.CTkLabel(frm_resumo, text=info_texto, font=theme.font_mono(11), text_color=theme.TEXT, justify="left").pack(anchor="w", padx=15, pady=(0, 10))
 
         # --- APONTAMENTO REAL ---
-        frm_real = ctk.CTkFrame(self, fg_color="white", border_width=1, border_color="#e0e0e0", corner_radius=8)
+        frm_real = ctk.CTkFrame(self, fg_color=theme.SURFACE, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_M)
         frm_real.pack(fill="x", padx=20, pady=10)
-        
-        ctk.CTkLabel(frm_real, text="Apontamento Real de Produção:", font=("Arial", 12, "bold"), text_color="#1f538d").pack(anchor="w", padx=15, pady=(10, 10))
+
+        ctk.CTkLabel(frm_real, text="Apontamento Real de Produção", font=theme.font_body(12, "bold"), text_color=theme.ACCENT).pack(anchor="w", padx=15, pady=(10, 10))
 
         # Tempo Real
         frm_tr = ctk.CTkFrame(frm_real, fg_color="transparent")
         frm_tr.pack(fill="x", padx=15, pady=5)
-        ctk.CTkLabel(frm_tr, text="Tempo Real (HH:MM):", font=("Arial", 11), text_color="gray40", width=120, anchor="e").pack(side="left", padx=(0, 10))
-        self.ent_tempo_real = ctk.CTkEntry(frm_tr, width=150, fg_color="#f0f2f5", text_color="black")
-        
+        ctk.CTkLabel(frm_tr, text="Tempo Real (HH:MM):", font=theme.font_body(11), text_color=theme.TEXT_MUTED, width=120, anchor="e").pack(side="left", padx=(0, 10))
+        self.ent_tempo_real = theme.entry(frm_tr, width=150, font=theme.font_mono(12))
+
         t_real_gravado = self.log.get("tempo_real", "")
         self.ent_tempo_real.insert(0, t_real_gravado if t_real_gravado else str(self.tempo_est))
         self.ent_tempo_real.pack(side="left")
@@ -113,22 +114,22 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         # Quantidade Real
         frm_qr = ctk.CTkFrame(frm_real, fg_color="transparent")
         frm_qr.pack(fill="x", padx=15, pady=(5, 15))
-        ctk.CTkLabel(frm_qr, text="Quantidade Real (g/ml):", font=("Arial", 11), text_color="gray40", width=120, anchor="e").pack(side="left", padx=(0, 10))
-        self.ent_qtd_real = ctk.CTkEntry(frm_qr, width=150, fg_color="#f0f2f5", text_color="black")
-        
+        ctk.CTkLabel(frm_qr, text="Quantidade Real (g/ml):", font=theme.font_body(11), text_color=theme.TEXT_MUTED, width=120, anchor="e").pack(side="left", padx=(0, 10))
+        self.ent_qtd_real = theme.entry(frm_qr, width=150, font=theme.font_mono(12))
+
         q_real_gravado = self.log.get("quantidade_real", "")
         try:
             val_inserir = str(round(float(q_real_gravado), 2)) if q_real_gravado else str(round(float(self.qtd_raw), 2))
             self.ent_qtd_real.insert(0, val_inserir)
         except (ValueError, TypeError):
             self.ent_qtd_real.insert(0, str(q_real_gravado if q_real_gravado else self.qtd_raw))
-            
+
         self.ent_qtd_real.pack(side="left")
 
         # --- ESTADO FINAL ---
-        ctk.CTkLabel(self, text="Estado Final da Ordem:", font=("Arial", 12, "bold"), text_color="gray30").pack(anchor="w", padx=20, pady=(15, 5))
-        self.cmb_estado = ctk.CTkComboBox(self, values=["Concluída", "Cancelada", "Em Andamento"], width=460, fg_color="#f0f2f5", text_color="black", state="readonly")
-        
+        ctk.CTkLabel(self, text="ESTADO FINAL DA ORDEM", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=20, pady=(15, 5))
+        self.cmb_estado = theme.combobox(self, values=["Concluída", "Cancelada", "Em Andamento"], width=460, state="readonly")
+
         # Agora reflete o estado real da ordem (não assume mais que está concluída)
         estado_atual = self.log.get("estado", "Em Andamento")
         if estado_atual == "A Imprimir": estado_atual = "Em Andamento"
@@ -136,41 +137,42 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         self.cmb_estado.pack(padx=20, pady=5)
 
         # --- CRITÉRIOS DE ACEITAÇÃO ---
-        frm_cq = ctk.CTkFrame(self, fg_color="white", border_width=1, border_color="#e0e0e0", corner_radius=8)
+        frm_cq = ctk.CTkFrame(self, fg_color=theme.SURFACE, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_M)
         frm_cq.pack(fill="x", padx=20, pady=15)
-        ctk.CTkLabel(frm_cq, text="Critérios de Aceitação (Controlo de Qualidade):", font=("Arial", 11, "bold"), text_color="gray40").pack(anchor="w", padx=15, pady=(10, 5))
-        
+        ctk.CTkLabel(frm_cq, text="CRITÉRIOS DE ACEITAÇÃO (CONTROLO DE QUALIDADE)", font=theme.font_eyebrow(9), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=15, pady=(10, 5))
+
         frm_checks = ctk.CTkFrame(frm_cq, fg_color="transparent")
         frm_checks.pack(fill="x", padx=15, pady=(5, 10))
-        
+
         qa_data = self.log.get("controlo_qualidade", {})
+        checkbox_kwargs = dict(fg_color=theme.ACCENT, hover_color=theme.ACCENT_HOVER, checkmark_color=theme.WHITE, border_color=theme.TEXT_MUTED, text_color=theme.TEXT)
 
         # Agora iniciam desmarcados, obrigando à verificação ativa (ou assumem o valor se já foi gravado antes)
-        self.chk_visual = ctk.CTkCheckBox(frm_checks, text="Inspeção\nVisual", font=("Arial", 11))
+        self.chk_visual = ctk.CTkCheckBox(frm_checks, text="Inspeção\nVisual", font=theme.font_body(11), **checkbox_kwargs)
         self.chk_visual.pack(side="left", expand=True)
         if qa_data.get("inspecao_visual"): self.chk_visual.select()
         else: self.chk_visual.deselect()
-        
-        self.chk_dimens = ctk.CTkCheckBox(frm_checks, text="Controlo\nDimensional", font=("Arial", 11))
+
+        self.chk_dimens = ctk.CTkCheckBox(frm_checks, text="Controlo\nDimensional", font=theme.font_body(11), **checkbox_kwargs)
         self.chk_dimens.pack(side="left", expand=True)
         if qa_data.get("controlo_dimensional"): self.chk_dimens.select()
         else: self.chk_dimens.deselect()
 
-        self.chk_conform = ctk.CTkCheckBox(frm_checks, text="Conformidade\ndas Peças", font=("Arial", 11))
+        self.chk_conform = ctk.CTkCheckBox(frm_checks, text="Conformidade\ndas Peças", font=theme.font_body(11), **checkbox_kwargs)
         self.chk_conform.pack(side="left", expand=True)
         if qa_data.get("conformidade"): self.chk_conform.select()
         else: self.chk_conform.deselect()
 
         # --- NÃO-CONFORMIDADE (OPCIONAL) ---
-        frm_nc = ctk.CTkFrame(self, fg_color="white", border_width=1, border_color="#e0e0e0", corner_radius=8)
+        frm_nc = ctk.CTkFrame(self, fg_color=theme.SURFACE, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_M)
         frm_nc.pack(fill="x", padx=20, pady=(0, 15))
-        ctk.CTkLabel(frm_nc, text="Não-Conformidade (se aplicável):", font=("Arial", 11, "bold"), text_color="gray40").pack(anchor="w", padx=15, pady=(10, 5))
+        ctk.CTkLabel(frm_nc, text="NÃO-CONFORMIDADE (SE APLICÁVEL)", font=theme.font_eyebrow(9), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=15, pady=(10, 5))
 
         valores_nc = ["Nenhuma"] + NCService.obter_nc_por_tecnologia(self.tecnologia)
-        self.cmb_nc = ctk.CTkComboBox(frm_nc, values=valores_nc, width=460, fg_color="#f0f2f5", text_color="black", state="readonly", command=self.on_nc_selecionada)
+        self.cmb_nc = theme.combobox(frm_nc, values=valores_nc, width=460, state="readonly", command=self.on_nc_selecionada)
         self.cmb_nc.pack(padx=15, pady=(0, 5), anchor="w")
 
-        self.lbl_acoes_nc = ctk.CTkLabel(frm_nc, text="", font=("Arial", 10), text_color="gray50", justify="left", wraplength=440)
+        self.lbl_acoes_nc = ctk.CTkLabel(frm_nc, text="", font=theme.font_body(10), text_color=theme.TEXT_MUTED, justify="left", wraplength=440)
         self.lbl_acoes_nc.pack(anchor="w", padx=15, pady=(0, 10))
 
         nc_gravado = self.log.get("nc_codigo", "")
@@ -179,7 +181,7 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         self.on_nc_selecionada(valor_inicial)
 
         # Botão com margem extra em baixo (pady)
-        self.btn_salvar = ctk.CTkButton(self, text="SALVAR APONTAMENTO E FECHAR", fg_color="#1f538d", hover_color="#143a63", font=("Arial", 12, "bold"), height=45, command=self.salvar)
+        self.btn_salvar = theme.button_primary(self, text="SALVAR APONTAMENTO E FECHAR", font=theme.font_body(12, "bold"), height=45, command=self.salvar)
         self.btn_salvar.pack(fill="x", padx=20, pady=(10, 20))
 
     def on_nc_selecionada(self, valor):

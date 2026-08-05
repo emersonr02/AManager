@@ -1,6 +1,7 @@
 import customtkinter as ctk
 from tkinter import messagebox
 from services.maquina_service import MaquinaService
+from gui import theme
 
 class JanelaLogisticaMaquina(ctk.CTkToplevel):
     def __init__(self, parent, maquina_dados, callback_atualizar, f_padrao, f_titulo):
@@ -8,49 +9,47 @@ class JanelaLogisticaMaquina(ctk.CTkToplevel):
         self.maquina_dados = maquina_dados  # Se for None -> Cadastro. Se vier preenchido -> Edição.
         self.callback = callback_atualizar
         self.f_padrao = f_padrao
-        
+
         self.title("Cadastro de Ativo" if not maquina_dados else f"Modificar Ativo - {maquina_dados.get('id')}")
         self.geometry("420x600")
         self.resizable(False, False)
-        
-        # Configuração do fundo branco para bater com o novo padrão UI/UX claro
-        self.configure(fg_color="#fcfcfc")
-        
+        self.configure(fg_color=theme.BG)
+
         # Garante que a janela fica focada à frente da principal
         self.transient(parent)
         self.grab_set()
 
-        ctk.CTkLabel(self, text="Informações do Ativo", font=f_titulo, text_color="#1f538d").pack(pady=15)
+        ctk.CTkLabel(self, text="Informações do Ativo", font=f_titulo, text_color=theme.ACCENT).pack(pady=15)
 
         # Campo: ID da Máquina
-        ctk.CTkLabel(self, text="ID Único do Ativo (Ex: X1C-4):", font=f_padrao, text_color="gray30").pack(anchor="w", padx=30, pady=(10, 0))
-        self.ent_id = ctk.CTkEntry(self, font=f_padrao, fg_color="white", border_color="gray80", text_color="black")
+        ctk.CTkLabel(self, text="ID ÚNICO DO ATIVO (EX: X1C-4)", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=30, pady=(10, 0))
+        self.ent_id = theme.entry(self, font=theme.font_mono(13))
         self.ent_id.pack(fill="x", padx=30, pady=5)
 
         # Campo: Nome Descritivo
-        ctk.CTkLabel(self, text="Nome Descritivo:", font=f_padrao, text_color="gray30").pack(anchor="w", padx=30, pady=(10, 0))
-        self.ent_nome = ctk.CTkEntry(self, font=f_padrao, fg_color="white", border_color="gray80", text_color="black")
+        ctk.CTkLabel(self, text="NOME DESCRITIVO", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=30, pady=(10, 0))
+        self.ent_nome = theme.entry(self, font=f_padrao)
         self.ent_nome.pack(fill="x", padx=30, pady=5)
 
         # Campo: Tecnologia AM
-        ctk.CTkLabel(self, text="Tecnologia AM:", font=f_padrao, text_color="gray30").pack(anchor="w", padx=30, pady=(10, 0))
-        self.cmb_tech = ctk.CTkComboBox(self, values=["FDM", "SLA", "SLS"], font=f_padrao, fg_color="white", border_color="gray80", text_color="black", button_color="#1f538d", state="readonly")
+        ctk.CTkLabel(self, text="TECNOLOGIA AM", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=30, pady=(10, 0))
+        self.cmb_tech = theme.combobox(self, values=["FDM", "SLA", "SLS"], font=f_padrao, state="readonly")
         self.cmb_tech.pack(fill="x", padx=30, pady=5)
 
         # Campo: Status Operacional
-        ctk.CTkLabel(self, text="Status Operacional:", font=f_padrao, text_color="gray30").pack(anchor="w", padx=30, pady=(10, 0))
-        self.cmb_est = ctk.CTkComboBox(self, values=["Operacional", "Manutenção - Parado", "Desativado"], font=f_padrao, fg_color="white", border_color="gray80", text_color="black", button_color="#1f538d", state="readonly")
+        ctk.CTkLabel(self, text="STATUS OPERACIONAL", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=30, pady=(10, 0))
+        self.cmb_est = theme.combobox(self, values=["Operacional", "Manutenção - Parado", "Desativado"], font=f_padrao, state="readonly")
         self.cmb_est.pack(fill="x", padx=30, pady=5)
 
         # Campo: Notas de Manutenção
-        ctk.CTkLabel(self, text="Notas de Manutenção / Diagnóstico:", font=f_padrao, text_color="gray30").pack(anchor="w", padx=30, pady=(10, 0))
-        self.ent_notas = ctk.CTkEntry(self, font=f_padrao, fg_color="white", border_color="gray80", text_color="black")
+        ctk.CTkLabel(self, text="NOTAS DE MANUTENÇÃO / DIAGNÓSTICO", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=30, pady=(10, 0))
+        self.ent_notas = theme.entry(self, font=f_padrao)
         self.ent_notas.pack(fill="x", padx=30, pady=5)
         self.ent_notas.insert(0, "OK")
 
         # NOVO CAMPO: URL da Miniatura (Pedido para as imagens das impressoras)
-        ctk.CTkLabel(self, text="URL da Miniatura da Máquina:", font=f_padrao, text_color="gray30").pack(anchor="w", padx=30, pady=(10, 0))
-        self.ent_url_img = ctk.CTkEntry(self, font=f_padrao, fg_color="white", border_color="gray80", text_color="black", placeholder_text="https://site.com/imagem.png")
+        ctk.CTkLabel(self, text="URL DA MINIATURA DA MÁQUINA", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=30, pady=(10, 0))
+        self.ent_url_img = theme.entry(self, font=f_padrao, placeholder_text="https://site.com/imagem.png")
         self.ent_url_img.pack(fill="x", padx=30, pady=5)
 
         # Se for um modo de Edição de uma máquina já existente, preenche os dados automáticos
@@ -67,12 +66,12 @@ class JanelaLogisticaMaquina(ctk.CTkToplevel):
             
             self.ent_url_img.insert(0, self.maquina_dados.get("url_img", ""))
 
-        # Botão Principal: Gravar (Estilizado com o Azul CEiiA)
-        ctk.CTkButton(self, text="GRAVAR ATIVO", fg_color="#1f538d", hover_color="#143a63", text_color="white", font=f_titulo, command=self.gravar).pack(fill="x", padx=30, pady=(25, 10))
+        # Botão Principal: Gravar
+        theme.button_primary(self, text="GRAVAR ATIVO", font=f_titulo, command=self.gravar).pack(fill="x", padx=30, pady=(25, 10))
 
         # Botão Secundário: Remover (Só aparece se o operador estiver a editar uma máquina existente)
         if self.maquina_dados:
-            ctk.CTkButton(self, text="ELIMINAR ATIVO DO PARQUE", fg_color="#A12222", hover_color="#7F1A1A", text_color="white", font=f_padrao, command=self.remover).pack(fill="x", padx=30, pady=5)
+            ctk.CTkButton(self, text="ELIMINAR ATIVO DO PARQUE", fg_color=theme.CRITICAL, hover_color=theme.CRITICAL[0], text_color="white", font=f_padrao, command=self.remover).pack(fill="x", padx=30, pady=5)
 
     def gravar(self):
         mid = self.ent_id.get().strip()
