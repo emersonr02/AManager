@@ -165,7 +165,7 @@ class JanelaEditarPedido(ctk.CTkToplevel):
         tech = self.cmb_tech.get()
         obs = self.txt_obs.get("1.0", tk.END).strip()
 
-        if not req or not data_ent or proj_sel == "Nenhum projeto cadastrado":
+        if not req or not data_ent or proj_sel == "Sem projetos registados":
             messagebox.showerror("Erro", "Requerente, Projeto e Data de Entrega são obrigatórios.")
             return
 
