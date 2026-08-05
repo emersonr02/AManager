@@ -1,10 +1,10 @@
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox
-from datetime import datetime
 
 from config.paths import ARQUIVO_PEDIDOS, ARQUIVO_PROJETOS, ARQUIVO_MATERIAIS
 from database.json_manager import JSONManager
+from services.pedido_service import PedidoService
 
 class JanelaEditarPedido(ctk.CTkToplevel):
     def __init__(self, parent, pedido, callback_atualizar):
@@ -200,23 +200,18 @@ class JanelaEditarPedido(ctk.CTkToplevel):
                 "qtd_produzida": 0
             })
 
-        pedidos = JSONManager.carregar(ARQUIVO_PEDIDOS)
-        target_id = self.pedido.get("id")
-
-        for p in pedidos:
-            if p.get("id") == target_id:
-                p["requerente_email"] = req
-                p["nr_projeto"] = nr_proj
-                p["nome_projeto"] = nome_proj
-                p["tecnologia"] = tech
-                p["observacoes"] = obs
-                p["data_entrega"] = data_ent
-                p["data_atualizacao"] = datetime.now().strftime("%Y-%m-%d")
-                p["link_arquivos"] = link
-                p["pecas"] = lista_pecas
-                break
-
-        JSONManager.salvar(pedidos, ARQUIVO_PEDIDOS)
+        pedido_atualizado = dict(self.pedido)
+        pedido_atualizado.update({
+            "requerente_email": req,
+            "nr_projeto": nr_proj,
+            "nome_projeto": nome_proj,
+            "tecnologia": tech,
+            "observacoes": obs,
+            "data_entrega": data_ent,
+            "link_arquivos": link,
+            "pecas": lista_pecas,
+        })
+        PedidoService.atualizar_pedido(pedido_atualizado)
 
         messagebox.showinfo("Sucesso", "Pedido atualizado com sucesso!")
         self.callback_atualizar()
