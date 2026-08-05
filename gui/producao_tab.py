@@ -4,6 +4,7 @@ from tkinter import messagebox
 import os
 from database.json_manager import JSONManager
 from services.pedido_service import PedidoService
+from services.producao_service import ProducaoService
 
 class ProducaoTab:
     def __init__(self, parent_frame, f_padrao, f_titulo, master_app=None):
@@ -336,7 +337,7 @@ class ProducaoTab:
             return
 
         tempo = self.ent_tempo.get().strip()
-        if not tempo or len(tempo) < 5:
+        if not tempo or not ProducaoService.validar_formato_tempo(tempo):
             messagebox.showwarning("Aviso", "Introduza um tempo de máquina válido (HH:MM).")
             return
 
