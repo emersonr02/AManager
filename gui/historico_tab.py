@@ -257,24 +257,14 @@ class HistoricoTab:
         caminho_salvar = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV", "*.csv")])
         if not caminho_salvar: return
 
-        linhas = self.tab_tree.get_children()
-        consumo_materiais = {}
-        horas_maquinas = {}
-        dados_principais = []
+        # Exporta os registos completos por trás das linhas atualmente visíveis
+        # na tabela (respeita os filtros ativos), não só as colunas mostradas.
+        ids_visiveis = {ProducaoService.extrair_id(self.tab_tree.item(i)['values'][0]) for i in self.tab_tree.get_children()}
+        producoes = [p for p in ProducaoService.obter_todos() if p.get("id") in ids_visiveis]
+        pedidos_db = JSONManager.carregar(ARQUIVO_PEDIDOS) if os.path.exists(ARQUIVO_PEDIDOS) else []
 
-        for i in linhas:
-            val = self.tab_tree.item(i)['values']
-            dados_principais.append(val)
-            maq, mat = val[3], val[4]
-            try: qnt = float(val[5])
-            except ValueError: qnt = 0.0
-            horas = ProducaoService.converter_para_horas(str(val[6]))
-
-            consumo_materiais[mat] = consumo_materiais.get(mat, 0.0) + qnt
-            horas_maquinas[maq] = horas_maquinas.get(maq, 0.0) + horas
-
-        if ExportService.exportar_historico_csv(caminho_salvar, dados_principais, consumo_materiais, horas_maquinas):
-            messagebox.showinfo("Sucesso", "Exportação analítica concluída.")
+        if ExportService.exportar_historico_csv(caminho_salvar, producoes, pedidos_db):
+            messagebox.showinfo("Sucesso", "Exportação de auditoria concluída.")
         else:
             messagebox.showerror("Erro", "Falha ao salvar CSV.")
 

@@ -29,6 +29,17 @@ class NCService:
         return lista_formatada
 
     @staticmethod
+    def obter_descricao(cod_alvo):
+        """Recebe um código (ex: 'COD001') e devolve a descrição registada
+        para esse código, ou string vazia se não existir."""
+        NCService.garantir_arquivos()
+        ncs = JSONManager.carregar(ARQUIVO_NC_FALHAS)
+        for nc in ncs:
+            if nc.get("cod") == cod_alvo:
+                return nc.get("descricao", "")
+        return ""
+
+    @staticmethod
     def obter_acoes_por_cod(cod_alvo):
         """
         Recebe um código (ex: 'COD001') e devolve uma lista de dicionários 

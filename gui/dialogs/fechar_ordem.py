@@ -2,6 +2,7 @@ import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox
 import os
+from datetime import datetime
 from database.json_manager import JSONManager
 from config.paths import ARQUIVO_PEDIDOS
 from services.producao_service import ProducaoService
@@ -217,7 +218,12 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         self.log["tempo_real"] = t_real
         self.log["quantidade_real"] = q_real
         self.log["estado"] = est_final
-        
+
+        # Rasto de auditoria: quem validou o QA e quando — distinto de
+        # "operador", que é quem lançou o fabrico e pode ser outra pessoa.
+        self.log["verificado_por"] = os.environ.get("USERNAME", "Desconhecido")
+        self.log["data_fecho"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
         self.log["controlo_qualidade"] = {
             "inspecao_visual": self.chk_visual.get() == 1,
             "controlo_dimensional": self.chk_dimens.get() == 1,
