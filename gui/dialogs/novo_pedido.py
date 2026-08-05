@@ -7,6 +7,7 @@ import os
 
 from config.paths import ARQUIVO_PEDIDOS, ARQUIVO_PROJETOS, ARQUIVO_MATERIAIS
 from database.json_manager import JSONManager
+from services.pedido_service import PedidoService
 
 class JanelaNovoPedido(ctk.CTkToplevel):
     def __init__(self, parent, callback_atualizar):
@@ -350,27 +351,16 @@ class JanelaNovoPedido(ctk.CTkToplevel):
                 
             lista_pecas.append({"pn": pn, "material": mat_peca, "qtd_solicitada": int(qtd_str), "qtd_produzida": 0})
 
-        pedidos = JSONManager.carregar(ARQUIVO_PEDIDOS)
-        novo_id = max([p.get("id", 0) for p in pedidos]) + 1 if pedidos else 1
-
-        novo_pedido = {
-            "id": novo_id,
-            "requerente_email": req,
-            "nr_projeto": nr_proj,
-            "nome_projeto": nome_proj,
-            "tecnologia": tech,
-            "observacoes": obs,
-            "data_pedido": datetime.now().strftime("%Y-%m-%d"),
-            "data_entrega": data_ent,
-            "data_atualizacao": datetime.now().strftime("%Y-%m-%d"),
-            "link_arquivos": link,
-            "estado": "Pendente",
-            "pecas": lista_pecas,
-            "producoes_vinculadas": []
-        }
-
-        pedidos.append(novo_pedido)
-        JSONManager.salvar(pedidos, ARQUIVO_PEDIDOS)
+        PedidoService.criar_pedido(
+            requerente_email=req,
+            nr_projeto=nr_proj,
+            nome_projeto=nome_proj,
+            tecnologia=tech,
+            data_entrega=data_ent,
+            link_arquivos=link,
+            observacoes=obs,
+            pecas=lista_pecas
+        )
         messagebox.showinfo("Sucesso", "Pedido registado com sucesso!")
         self.callback_atualizar()
         self.destroy()

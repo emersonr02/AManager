@@ -28,6 +28,25 @@ MES_i3D_System/
 ├── config/                 # Global settings, paths, and static dictionaries
 ├── data/                   # Local JSON database files
 ├── database/               # JSONManager with file-locking concurrency protocol
-├── models/                 # Data classes and object structures
-├── services/               # Business logic, material calculations, and CSV export
-└── gui/                    # Separated CustomTkinter tab interfaces and dialogs
+├── services/                # Business logic, material calculations, and CSV export
+├── gui/                     # Separated CustomTkinter tab interfaces and dialogs
+└── tests/                   # Automated tests for the services and JSON store
+```
+
+## 🛠️ Setup
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+Running the app:
+
+```bash
+python main.py
+```
+
+Running the test suite:
+
+```bash
+pytest
+```

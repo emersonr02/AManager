@@ -12,27 +12,28 @@ class PedidoService:
         return pedidos
 
     @staticmethod
-    def criar_pedido(requerente: str, projeto: str, tecnologia: str, responsavel: str, observacao: str):
+    def criar_pedido(requerente_email: str, nr_projeto: str, nome_projeto: str, tecnologia: str,
+                      data_entrega: str, link_arquivos: str, observacoes: str, pecas: list):
         """Aplica a regra de negócio para gerar um novo ID e salvar o pedido."""
-        hoje = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-        # Regra de negócio: limpa o nome do projeto se vier no formato "ID - Nome"
-        projeto_limpo = projeto.split(" - ")[0] if " - " in projeto else projeto
-
+        hoje = datetime.now().strftime("%Y-%m-%d")
         novo_pedido = {}
 
         def _transformar(pedidos):
             novo_id = max([p.get("id", 0) for p in pedidos]) + 1 if pedidos else 1
             novo_pedido.update({
                 "id": novo_id,
-                "requerente": requerente,
-                "projeto": projeto_limpo,
+                "requerente_email": requerente_email,
+                "nr_projeto": nr_projeto,
+                "nome_projeto": nome_projeto,
                 "tecnologia": tecnologia,
-                "responsavel": responsavel,
-                "status": "Em Andamento",
-                "observacao": observacao,
+                "observacoes": observacoes,
                 "data_pedido": hoje,
-                "data_atualizacao": hoje
+                "data_entrega": data_entrega,
+                "data_atualizacao": hoje,
+                "link_arquivos": link_arquivos,
+                "estado": "Pendente",
+                "pecas": pecas,
+                "producoes_vinculadas": []
             })
             pedidos.append(novo_pedido)
             return pedidos
@@ -44,8 +45,8 @@ class PedidoService:
 
     @staticmethod
     def atualizar_pedido(pedido_atualizado: dict):
-        """Atualiza um pedido existente e renova a data de atualização."""
-        pedido_atualizado["data_atualizacao"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+        """Substitui o pedido com o mesmo id e renova a data de atualização."""
+        pedido_atualizado["data_atualizacao"] = datetime.now().strftime("%Y-%m-%d")
 
         def _transformar(pedidos):
             for idx, p in enumerate(pedidos):
