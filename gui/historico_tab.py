@@ -314,32 +314,17 @@ class HistoricoTab:
                 break
 
     def salvar_estado_final_ordem(self, log_atualizado):
-        # 1. Guarda a atualização na base de dados
+        # Guarda a atualização na base de dados. O estado dos pedidos vinculados
+        # NÃO é alterado automaticamente aqui — um pedido pode ter mais do que uma
+        # produção associada, e o sistema não sabe (ainda) se as quantidades pedidas
+        # já foram todas satisfeitas. Mudar o estado do pedido é feito manualmente
+        # em Gestão de Pedidos.
         logs = JSONManager.carregar(ARQUIVO_LOGS)
         for idx, log in enumerate(logs):
             if log.get("id") == log_atualizado.get("id"):
                 logs[idx] = log_atualizado
                 break
         JSONManager.salvar(logs, ARQUIVO_LOGS)
-
-        # 2. RASTREABILIDADE BIDIRECIONAL
-        estado_final = log_atualizado.get("estado")
-        pedidos_vinc = log_atualizado.get("pedidos_vinculados", [])
-        
-        if pedidos_vinc:
-            pedidos_db = JSONManager.carregar(ARQUIVO_PEDIDOS)
-            mudou_pedido = False
-            
-            for p in pedidos_db:
-                if p.get("id") in pedidos_vinc:
-                    if estado_final == "Concluída":
-                        p["estado"] = "Entregue"
-                    elif estado_final == "Cancelada":
-                        p["estado"] = "Pendente"
-                    mudou_pedido = True
-                    
-            if mudou_pedido:
-                JSONManager.salvar(pedidos_db, ARQUIVO_PEDIDOS)
 
         self.atualizar_tabela()
 
