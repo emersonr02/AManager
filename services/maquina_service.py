@@ -16,47 +16,31 @@ class MaquinaService:
 
     @staticmethod
     def salvar_maquina(mid: str, nome: str, tech: str, estado: str, manutencao: str, url_img: str = ""):
-        maquinas = JSONManager.carregar(ARQUIVO_MAQUINAS)
-        existe = False
-        
-        for m in maquinas:
-            if m.get("id") == mid:
-                m.update({
-                    "nome": nome, 
-                    "tech": tech, 
-                    "estado": estado, 
-                    "manutencao": manutencao,
-                    "url_img": url_img # Atualiza
-                })
-                existe = True
-                break
-                
-        if not existe:
+        def _transformar(maquinas):
+            for m in maquinas:
+                if m.get("id") == mid:
+                    m.update({
+                        "nome": nome,
+                        "tech": tech,
+                        "estado": estado,
+                        "manutencao": manutencao,
+                        "url_img": url_img  # Atualiza
+                    })
+                    return maquinas
+
             maquinas.append({
-                "id": mid, 
-                "nome": nome, 
-                "tech": tech, 
-                "estado": estado, 
+                "id": mid,
+                "nome": nome,
+                "tech": tech,
+                "estado": estado,
                 "manutencao": manutencao,
-                "url_img": url_img # Cria novo
+                "url_img": url_img  # Cria novo
             })
-            
-        JSONManager.salvar(maquinas, ARQUIVO_MAQUINAS)
-                
-        if not existe:
-            maquinas.append({
-                "id": mid, 
-                "nome": nome, 
-                "tech": tech, 
-                "estado": estado, 
-                "manutencao": manutencao
-            })
-            
-        JSONManager.salvar(maquinas, ARQUIVO_MAQUINAS)
+            return maquinas
+
+        JSONManager.atualizar(ARQUIVO_MAQUINAS, _transformar)
 
     @staticmethod
     def remover_maquina(mid: str):
         """Remove a máquina do parque pelo ID."""
-        maquinas = JSONManager.carregar(ARQUIVO_MAQUINAS)
-        maquinas_filtradas = [m for m in maquinas if m.get("id") != mid]
-        JSONManager.salvar(maquinas_filtradas, ARQUIVO_MAQUINAS)
+        JSONManager.atualizar(ARQUIVO_MAQUINAS, lambda maquinas: [m for m in maquinas if m.get("id") != mid])

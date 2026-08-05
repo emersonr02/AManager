@@ -4,46 +4,91 @@ import time
 
 class JSONManager:
     @staticmethod
-    def _aguardar_lock(caminho, timeout=3):
-        """Evita colisão de dados se duas pessoas salvarem ao mesmo tempo na rede."""
+    def _adquirir_lock(caminho, timeout=5):
+        """Cria o ficheiro de lock de forma atómica (O_EXCL), evitando a condição de
+        corrida de verificar 'existe?' e criar como dois passos separados."""
         lock_file = caminho + ".lock"
         start_time = time.time()
-        
-        while os.path.exists(lock_file):
-            if time.time() - start_time > timeout:
-                try: os.remove(lock_file) # Força a quebra se travar
-                except: pass
-                break
-            time.sleep(0.1)
-            
-        try:
-            with open(lock_file, 'w') as f: f.write("locked")
-        except: pass
+
+        while True:
+            try:
+                fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.close(fd)
+                return
+            except FileExistsError:
+                if time.time() - start_time > timeout:
+                    try:
+                        os.remove(lock_file)  # Quebra lock preso (ex: processo morreu a meio)
+                    except OSError:
+                        pass
+                    continue
+                time.sleep(0.1)
 
     @staticmethod
-    def _liberar_lock(caminho):
+    def _libertar_lock(caminho):
         lock_file = caminho + ".lock"
-        if os.path.exists(lock_file):
-            try: os.remove(lock_file)
-            except: pass
+        try:
+            os.remove(lock_file)
+        except OSError:
+            pass
 
     @staticmethod
-    def carregar(caminho):
-        if not os.path.exists(caminho): return []
-        JSONManager._aguardar_lock(caminho)
+    def _ler_sem_lock(caminho):
+        if not os.path.exists(caminho):
+            return []
         try:
             with open(caminho, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except Exception:
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError) as e:
+            corrompido = caminho + ".corrompido"
+            try:
+                os.replace(caminho, corrompido)
+            except OSError:
+                pass
+            print(f"[JSONManager] AVISO: '{caminho}' estava corrompido e foi movido para "
+                  f"'{corrompido}' para não perder o conteúdo. A continuar com dados vazios. "
+                  f"Detalhe: {e}")
             return []
+
+    @staticmethod
+    def _escrever_sem_lock(dados, caminho):
+        """Escrita atómica: grava num ficheiro temporário e só depois substitui o
+        original, para nunca deixar um JSON truncado/inválido em disco."""
+        pasta = os.path.dirname(caminho) or "."
+        os.makedirs(pasta, exist_ok=True)
+        tmp_path = caminho + ".tmp"
+        with open(tmp_path, 'w', encoding='utf-8') as f:
+            json.dump(dados, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, caminho)
+
+    @staticmethod
+    def carregar(caminho):
+        JSONManager._adquirir_lock(caminho)
+        try:
+            return JSONManager._ler_sem_lock(caminho)
         finally:
-            JSONManager._liberar_lock(caminho)
+            JSONManager._libertar_lock(caminho)
 
     @staticmethod
     def salvar(dados, caminho):
-        JSONManager._aguardar_lock(caminho)
+        JSONManager._adquirir_lock(caminho)
         try:
-            with open(caminho, 'w', encoding='utf-8') as f:
-                json.dump(dados, f, indent=2, ensure_ascii=False)
+            JSONManager._escrever_sem_lock(dados, caminho)
         finally:
-            JSONManager._liberar_lock(caminho)
+            JSONManager._libertar_lock(caminho)
+
+    @staticmethod
+    def atualizar(caminho, transformar):
+        """Lê, aplica `transformar(dados) -> dados_novos` e grava, tudo sob um único
+        ciclo de lock — para operações de leitura-modificação-escrita (ex: atualizar
+        um registo existente) não ficarem expostas a outra escrita a meio."""
+        JSONManager._adquirir_lock(caminho)
+        try:
+            dados = JSONManager._ler_sem_lock(caminho)
+            dados = transformar(dados)
+            JSONManager._escrever_sem_lock(dados, caminho)
+            return dados
+        finally:
+            JSONManager._libertar_lock(caminho)
