@@ -8,6 +8,14 @@ class ProducaoService:
         return bool(re.match(r"^\d{2}:\d{2}$", tempo_str.strip()))
 
     @staticmethod
+    def validar_numero_positivo(valor_str: str) -> bool:
+        """Valida se a string representa um número > 0 (aceita vírgula ou ponto decimal)."""
+        try:
+            return float(valor_str.strip().replace(',', '.')) > 0
+        except (ValueError, AttributeError):
+            return False
+
+    @staticmethod
     def converter_para_horas(hhmm: str) -> float:
         """Converte string 'HH:MM' para float (ex: '01:30' -> 1.5)"""
         try:

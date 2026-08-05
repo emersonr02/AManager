@@ -350,10 +350,10 @@ class ProducaoTab:
         # ==========================================
         if tech == "FDM":
             quant = self.ent_quant.get().strip()
-            if not quant:
-                messagebox.showwarning("Aviso", "Bloqueio: A Quantidade de material (g) é obrigatória.")
+            if not quant or not ProducaoService.validar_numero_positivo(quant):
+                messagebox.showwarning("Aviso", "Bloqueio: A Quantidade de material (g) tem de ser um número válido maior que zero.")
                 return
-            
+
             # Verifica se TODOS os checks estão marcados
             if not all(var.get() for var in self.fdm_vars.values()):
                 messagebox.showwarning("Erro de Qualidade", "Bloqueio: É obrigatório validar todos os itens da Checklist Crítica FDM para iniciar a produção.")
@@ -361,10 +361,10 @@ class ProducaoTab:
 
         elif tech == "SLA":
             quant = self.ent_quant.get().strip()
-            if not quant:
-                messagebox.showwarning("Aviso", "Bloqueio: A Quantidade de resina (ml) é obrigatória.")
+            if not quant or not ProducaoService.validar_numero_positivo(quant):
+                messagebox.showwarning("Aviso", "Bloqueio: A Quantidade de resina (ml) tem de ser um número válido maior que zero.")
                 return
-            
+
             # Verifica se TODOS os checks estão marcados
             if not all(var.get() for var in self.sla_vars.values()):
                 messagebox.showwarning("Erro de Qualidade", "Bloqueio: É obrigatório validar todos os itens da Checklist Crítica SLA para iniciar a produção.")
@@ -374,11 +374,15 @@ class ProducaoTab:
             altura = self.ent_altura.get().strip()
             perc = self.ent_perc.get().strip()
             lote = self.ent_lote.get().strip()
-            
+
             if not altura or not perc or not lote:
                 messagebox.showwarning("Aviso", "Bloqueio: A Altura da Cuba, % de Pó Novo e Lote do Pó são obrigatórios.")
                 return
-            
+
+            if not ProducaoService.validar_numero_positivo(altura) or not ProducaoService.validar_numero_positivo(perc):
+                messagebox.showwarning("Aviso", "Bloqueio: A Altura da Cuba e a % de Pó Novo têm de ser números válidos maiores que zero.")
+                return
+
             # Verifica se TODOS os checks estão marcados
             if not all(var.get() for var in self.sls_vars.values()):
                 messagebox.showwarning("Erro de Qualidade", "Bloqueio: É obrigatório validar todos os parâmetros e Checklist Crítica SLS para iniciar a produção.")
