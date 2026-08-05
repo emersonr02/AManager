@@ -86,12 +86,13 @@ class HistoricoTab:
         frm_conteudo = ctk.CTkFrame(self.parent, fg_color=theme.SURFACE, corner_radius=theme.RADIUS_M, border_width=1, border_color=theme.BORDER)
         frm_conteudo.pack(fill="both", expand=True, padx=24, pady=5)
 
-        cols = ("id", "data", "projeto", "maquina", "material", "qnt", "tempo", "estado")
-        anchors = {"id": "center", "data": "center", "projeto": "w", "maquina": "w", "material": "w", "qnt": "center", "tempo": "center", "estado": "w"}
+        cols = ("id", "data", "projeto", "maquina", "material", "qnt", "tempo", "estado", "operador", "verificado")
+        anchors = {"id": "center", "data": "center", "projeto": "w", "maquina": "w", "material": "w", "qnt": "center", "tempo": "center", "estado": "w", "operador": "w", "verificado": "w"}
         self.tab_tree = ttk.Treeview(frm_conteudo, columns=cols, show="headings", style="Dashboard.Treeview")
         for c in cols:
             self.tab_tree.heading(c, text=c.upper(), anchor=anchors[c])
-
+        self.tab_tree.heading("operador", text="INICIADO POR")
+        self.tab_tree.heading("verificado", text="VERIFICADO POR")
 
         self.tab_tree.column("id", width=95, anchor="center")
         self.tab_tree.column("data", width=90, anchor="center")
@@ -101,6 +102,8 @@ class HistoricoTab:
         self.tab_tree.column("qnt", width=70, anchor="center")
         self.tab_tree.column("tempo", width=70, anchor="center")
         self.tab_tree.column("estado", width=130, anchor="w")
+        self.tab_tree.column("operador", width=110, anchor="w")
+        self.tab_tree.column("verificado", width=110, anchor="w")
 
         self.tab_tree.bind("<Double-1>", self.abrir_tratamento_ordem)
 
@@ -230,9 +233,13 @@ class HistoricoTab:
             # Formata a data para a tabela (esconde a hora se existir)
             data_tabela = log_data_str.split(" ")[0] if " " in log_data_str else log_data_str
 
+            # "—" para produções ainda por fechar, para distinguir de um campo em branco
+            operador_log = l.get("operador", "") or "—"
+            verificado_log = l.get("verificado_por", "") or "—"
+
             item_id = self.tab_tree.insert("", "end", values=(
                 ProducaoService.formatar_codigo(l.get("id")), data_tabela, projeto_final, maquina_log,
-                material_final, qtd_mostrar, tempo_mostrar, estado_log
+                material_final, qtd_mostrar, tempo_mostrar, estado_log, operador_log, verificado_log
             ))
             pill_dados[item_id] = (estado_log, _VARIANTE_ESTADO.get(estado_log, "neutral"))
 
