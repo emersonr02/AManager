@@ -86,12 +86,13 @@ class HistoricoTab:
         frm_conteudo = ctk.CTkFrame(self.parent, fg_color=theme.SURFACE, corner_radius=theme.RADIUS_M, border_width=1, border_color=theme.BORDER)
         frm_conteudo.pack(fill="both", expand=True, padx=24, pady=5)
 
-        cols = ("id", "data", "projeto", "maquina", "material", "qnt", "tempo", "estado")
-        anchors = {"id": "center", "data": "center", "projeto": "w", "maquina": "w", "material": "w", "qnt": "center", "tempo": "center", "estado": "w"}
+        cols = ("id", "data", "projeto", "maquina", "material", "qnt", "tempo", "estado", "operador", "verificado")
+        anchors = {"id": "center", "data": "center", "projeto": "w", "maquina": "w", "material": "w", "qnt": "center", "tempo": "center", "estado": "w", "operador": "w", "verificado": "w"}
         self.tab_tree = ttk.Treeview(frm_conteudo, columns=cols, show="headings", style="Dashboard.Treeview")
         for c in cols:
             self.tab_tree.heading(c, text=c.upper(), anchor=anchors[c])
-
+        self.tab_tree.heading("operador", text="INICIADO POR")
+        self.tab_tree.heading("verificado", text="VERIFICADO POR")
 
         self.tab_tree.column("id", width=95, anchor="center")
         self.tab_tree.column("data", width=90, anchor="center")
@@ -101,6 +102,8 @@ class HistoricoTab:
         self.tab_tree.column("qnt", width=70, anchor="center")
         self.tab_tree.column("tempo", width=70, anchor="center")
         self.tab_tree.column("estado", width=130, anchor="w")
+        self.tab_tree.column("operador", width=110, anchor="w")
+        self.tab_tree.column("verificado", width=110, anchor="w")
 
         self.tab_tree.bind("<Double-1>", self.abrir_tratamento_ordem)
 
@@ -230,9 +233,13 @@ class HistoricoTab:
             # Formata a data para a tabela (esconde a hora se existir)
             data_tabela = log_data_str.split(" ")[0] if " " in log_data_str else log_data_str
 
+            # "—" para produções ainda por fechar, para distinguir de um campo em branco
+            operador_log = l.get("operador", "") or "—"
+            verificado_log = l.get("verificado_por", "") or "—"
+
             item_id = self.tab_tree.insert("", "end", values=(
                 ProducaoService.formatar_codigo(l.get("id")), data_tabela, projeto_final, maquina_log,
-                material_final, qtd_mostrar, tempo_mostrar, estado_log
+                material_final, qtd_mostrar, tempo_mostrar, estado_log, operador_log, verificado_log
             ))
             pill_dados[item_id] = (estado_log, _VARIANTE_ESTADO.get(estado_log, "neutral"))
 
@@ -257,24 +264,14 @@ class HistoricoTab:
         caminho_salvar = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV", "*.csv")])
         if not caminho_salvar: return
 
-        linhas = self.tab_tree.get_children()
-        consumo_materiais = {}
-        horas_maquinas = {}
-        dados_principais = []
+        # Exporta os registos completos por trás das linhas atualmente visíveis
+        # na tabela (respeita os filtros ativos), não só as colunas mostradas.
+        ids_visiveis = {ProducaoService.extrair_id(self.tab_tree.item(i)['values'][0]) for i in self.tab_tree.get_children()}
+        producoes = [p for p in ProducaoService.obter_todos() if p.get("id") in ids_visiveis]
+        pedidos_db = JSONManager.carregar(ARQUIVO_PEDIDOS) if os.path.exists(ARQUIVO_PEDIDOS) else []
 
-        for i in linhas:
-            val = self.tab_tree.item(i)['values']
-            dados_principais.append(val)
-            maq, mat = val[3], val[4]
-            try: qnt = float(val[5])
-            except ValueError: qnt = 0.0
-            horas = ProducaoService.converter_para_horas(str(val[6]))
-
-            consumo_materiais[mat] = consumo_materiais.get(mat, 0.0) + qnt
-            horas_maquinas[maq] = horas_maquinas.get(maq, 0.0) + horas
-
-        if ExportService.exportar_historico_csv(caminho_salvar, dados_principais, consumo_materiais, horas_maquinas):
-            messagebox.showinfo("Sucesso", "Exportação analítica concluída.")
+        if ExportService.exportar_historico_csv(caminho_salvar, producoes, pedidos_db):
+            messagebox.showinfo("Sucesso", "Exportação de auditoria concluída.")
         else:
             messagebox.showerror("Erro", "Falha ao salvar CSV.")
 

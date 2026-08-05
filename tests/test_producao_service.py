@@ -46,6 +46,26 @@ def test_calcular_consumo_sls_usa_formula_oficial():
     assert resultado == esperado
 
 
+def test_estimar_quantidade_fdm_sla_le_quantidade_consumida():
+    assert ProducaoService.estimar_quantidade({"tecnologia": "FDM", "quantidade_consumida": "150"}) == "150"
+
+
+def test_estimar_quantidade_sls_deriva_de_altura_e_percentagem():
+    producao = {"tecnologia": "SLS", "altura_cuba": "5.0", "percentagem_po_novo": "0.3"}
+    esperado = f"{ProducaoService.calcular_consumo_sls(5.0, 0.3):.2f}"
+    assert ProducaoService.estimar_quantidade(producao) == esperado
+
+
+def test_estimar_quantidade_sls_aceita_percentagem_em_formato_inteiro():
+    producao_fracao = {"tecnologia": "SLS", "altura_cuba": "5.0", "percentagem_po_novo": "0.3"}
+    producao_inteiro = {"tecnologia": "SLS", "altura_cuba": "5.0", "percentagem_po_novo": "30"}
+    assert ProducaoService.estimar_quantidade(producao_inteiro) == ProducaoService.estimar_quantidade(producao_fracao)
+
+
+def test_estimar_quantidade_sls_invalida_devolve_vazio():
+    assert ProducaoService.estimar_quantidade({"tecnologia": "SLS", "altura_cuba": "abc", "percentagem_po_novo": "0.3"}) == ""
+
+
 def _criar(arquivo_producoes, **overrides):
     dados = dict(
         tecnologia="FDM",

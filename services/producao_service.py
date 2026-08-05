@@ -72,7 +72,23 @@ class ProducaoService:
         consumo_real_kg = peso_total_kg * perc_po_novo
         
         return round(consumo_real_kg, 4)
-    
+
+    @staticmethod
+    def estimar_quantidade(producao: dict) -> str:
+        """Quantidade estimada de uma produção, num formato pronto a mostrar.
+        Para SLS não há um campo direto — deriva-se de altura_cuba e
+        percentagem_po_novo pela mesma fórmula usada no fecho da ordem."""
+        if producao.get("tecnologia") == "SLS":
+            try:
+                altura = float(str(producao.get("altura_cuba", 0)).replace(",", "."))
+                perc = float(str(producao.get("percentagem_po_novo", 0)).replace(",", "."))
+                if perc > 1:
+                    perc = perc / 100
+                return f"{ProducaoService.calcular_consumo_sls(altura, perc):.2f}"
+            except ValueError:
+                return ""
+        return str(producao.get("quantidade_consumida", ""))
+
     @staticmethod
     def obter_ultimo_lote_sls():
         logs = JSONManager.carregar(ARQUIVO_LOGS)

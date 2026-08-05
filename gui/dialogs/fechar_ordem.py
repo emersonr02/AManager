@@ -2,6 +2,7 @@ import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox
 import os
+from datetime import datetime
 from database.json_manager import JSONManager
 from config.paths import ARQUIVO_PEDIDOS
 from services.producao_service import ProducaoService
@@ -19,7 +20,7 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
 
         self.title(f"Tratamento e Fecho - Ordem #{codigo_ordem}")
         # Aumentada a altura da janela para garantir que o botão aparece perfeitamente
-        self.geometry("520x800")
+        self.geometry("520x830")
         self.configure(fg_color=theme.BG)
         self.resizable(False, False)
         
@@ -181,6 +182,12 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         self.cmb_nc.set(valor_inicial)
         self.on_nc_selecionada(valor_inicial)
 
+        # Visível antes de gravar: quem fica registado como tendo validado este
+        # fecho — para não ser um campo capturado silenciosamente em segundo plano.
+        verificador_atual = os.environ.get("USERNAME", "Desconhecido")
+        ctk.CTkLabel(self, text=f"Este fecho fica registado como verificado por: {verificador_atual}",
+                     font=theme.font_body(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=20, pady=(0, 5))
+
         # Botão com margem extra em baixo (pady)
         self.btn_salvar = theme.button_primary(self, text="SALVAR APONTAMENTO E FECHAR", font=theme.font_body(12, "bold"), height=45, command=self.salvar)
         self.btn_salvar.pack(fill="x", padx=20, pady=(10, 20))
@@ -217,7 +224,12 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         self.log["tempo_real"] = t_real
         self.log["quantidade_real"] = q_real
         self.log["estado"] = est_final
-        
+
+        # Rasto de auditoria: quem validou o QA e quando — distinto de
+        # "operador", que é quem lançou o fabrico e pode ser outra pessoa.
+        self.log["verificado_por"] = os.environ.get("USERNAME", "Desconhecido")
+        self.log["data_fecho"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
         self.log["controlo_qualidade"] = {
             "inspecao_visual": self.chk_visual.get() == 1,
             "controlo_dimensional": self.chk_dimens.get() == 1,
