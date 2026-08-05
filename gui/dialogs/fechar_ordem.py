@@ -13,7 +13,7 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         self.log = log_data
         self.callback_salvar = callback_salvar
         
-        id_ordem = self.log.get('id', self.log.get('id_producao', ''))
+        id_ordem = self.log.get('id', '')
         
         self.title(f"Tratamento e Fecho - Ordem #{id_ordem}")
         # Aumentada a altura da janela para garantir que o botão aparece perfeitamente
@@ -39,7 +39,7 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
             
             # Aproveitar para extrair materiais diretamente dos pedidos vinculados
             for p in pedidos_db:
-                if p.get("id", p.get("id_pedido")) in vinculos:
+                if p.get("id") in vinculos:
                     if p.get("material"): materiais_set.add(p["material"])
                     for peca in p.get("pecas", []):
                         if peca.get("material"): materiais_set.add(peca["material"])
@@ -49,7 +49,7 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         self.material_fmt = " | ".join(materiais_set) if materiais_set else self.log.get("material", "N/A")
         
         # 2. Dados Base
-        self.maquina = self.log.get("maquina", self.log.get("id_maquina", "N/A"))
+        self.maquina = self.log.get("maquina", "N/A")
         self.tecnologia = self.log.get("tecnologia", "FDM")
         self.tempo_est = self.log.get("tempo_estimado", self.log.get("tempo", "00:00"))
         
@@ -77,11 +77,11 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
                 self.qtd_est = "Erro no Cálculo"
                 self.qtd_raw = 0.0
         else:
-            self.qtd_raw = self.log.get("quantidade_consumida", self.log.get("quantidade", self.log.get("qnt", 0.0)))
+            self.qtd_raw = self.log.get("quantidade_consumida", 0.0)
             self.qtd_est = str(self.qtd_raw)
 
     def construir_layout(self):
-        id_ordem = self.log.get('id', self.log.get('id_producao', ''))
+        id_ordem = self.log.get('id', '')
         ctk.CTkLabel(self, text=f"Tratamento e Fecho - Ordem #{id_ordem}", font=("Arial", 16, "bold"), text_color="#1f538d").pack(pady=(20, 10))
 
         # --- RESUMO DO PLANEAMENTO ---

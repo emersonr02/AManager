@@ -28,7 +28,7 @@ class JanelaNovoPedido(ctk.CTkToplevel):
     def obter_requerentes_historico(self):
         if not os.path.exists(ARQUIVO_PEDIDOS): return []
         pedidos = JSONManager.carregar(ARQUIVO_PEDIDOS)
-        requerentes = {p.get("requerente_email", p.get("requerente", "")).strip() for p in pedidos}
+        requerentes = {p.get("requerente_email", "").strip() for p in pedidos}
         return sorted([req for req in requerentes if req])
 
     def carregar_dados_auxiliares(self):
@@ -351,7 +351,7 @@ class JanelaNovoPedido(ctk.CTkToplevel):
             lista_pecas.append({"pn": pn, "material": mat_peca, "qtd_solicitada": int(qtd_str), "qtd_produzida": 0})
 
         pedidos = JSONManager.carregar(ARQUIVO_PEDIDOS)
-        novo_id = max([p.get("id_pedido", p.get("id", 0)) for p in pedidos]) + 1 if pedidos else 1
+        novo_id = max([p.get("id", 0) for p in pedidos]) + 1 if pedidos else 1
 
         novo_pedido = {
             "id": novo_id,
