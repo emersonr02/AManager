@@ -127,9 +127,47 @@ class PedidosTab:
             menu = tk.Menu(self.parent, tearoff=0, font=("Segoe UI", 10))
             menu.add_command(label="✏️ Editar Pedido", command=self.abrir_edicao)
             menu.add_command(label="🔄 Alterar Estado", command=self.abrir_dialogo_estado)
+            menu.add_command(label="📧 Copiar Email de Resposta", command=self.abrir_email_resposta)
             menu.add_separator()
             menu.add_command(label="🗑️ Eliminar (Soft Delete)", command=self.soft_delete_pedido)
             menu.post(event.x_root, event.y_root)
+
+    def abrir_email_resposta(self):
+        """Gera um texto de resposta pronto a copiar — nunca envia nada sozinho."""
+        sel = self.tree_pedidos.selection()
+        if not sel: return
+        vals = self.tree_pedidos.item(sel[0])['values']
+        codigo, requerente, estado = vals[0], vals[2], vals[4]
+
+        texto = (
+            "Bom dia,\n\n"
+            f"O seu pedido de impressão ID: {codigo} está em: {estado}.\n\n"
+            "Qualquer dúvida, estamos disponíveis.\n\n"
+            "Cumprimentos,\n"
+            "Equipa i3D | CEiiA"
+        )
+
+        top = ctk.CTkToplevel(self.parent.winfo_toplevel())
+        top.title(f"Email de Resposta - {codigo}")
+        top.geometry("480x360")
+        top.configure(fg_color=theme.BG)
+        top.transient(self.parent.winfo_toplevel())
+        top.grab_set()
+
+        ctk.CTkLabel(top, text=f"Resposta para {requerente}", font=theme.font_display(14), text_color=theme.ACCENT).pack(pady=(15, 2), padx=20, anchor="w")
+        ctk.CTkLabel(top, text="Pode editar o texto antes de copiar.", font=theme.font_body(11), text_color=theme.TEXT_MUTED).pack(padx=20, anchor="w")
+
+        txt_email = ctk.CTkTextbox(top, width=440, height=220, fg_color=theme.SURFACE_ALT, text_color=theme.TEXT, border_color=theme.BORDER, border_width=1)
+        txt_email.pack(padx=20, pady=10, fill="both", expand=True)
+        txt_email.insert("1.0", texto)
+
+        def copiar():
+            top.clipboard_clear()
+            top.clipboard_append(txt_email.get("1.0", tk.END).strip())
+            top.update()
+            messagebox.showinfo("Copiado", "Texto copiado para a área de transferência.")
+
+        theme.button_primary(top, text="Copiar para a Área de Transferência", command=copiar).pack(pady=(0, 15), padx=20, fill="x")
 
     def abrir_novo_pedido(self):
         JanelaNovoPedido(self.parent.winfo_toplevel(), self.atualizar_tabela)
