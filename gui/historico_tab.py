@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import os
 
-from config.paths import ARQUIVO_PEDIDOS
+from config.paths import ARQUIVO_PEDIDOS, ARQUIVO_MAQUINAS
 from database.json_manager import JSONManager
 from services.producao_service import ProducaoService
 from services.export_service import ExportService
@@ -112,10 +112,6 @@ class HistoricoTab:
         sb.pack(fill="y", side="right", pady=10, padx=(0, 5))
         self.tab_tree.pack(fill="both", expand=True, side="left", padx=10, pady=10)
 
-        # Criado depois da scrollbar: precisa de "envolver" o yscrollcommand já
-        # ligado ao sb.set, para saber repor as pills sempre que a vista faz scroll.
-        self.estado_pills = theme.TreeviewPillColumn(self.tab_tree, "estado")
-
         # 5. BARRA DE AÇÕES INFERIOR
         frm_acoes = ctk.CTkFrame(self.parent, fg_color="transparent")
         frm_acoes.pack(fill="x", padx=24, pady=(5, 18))
@@ -133,9 +129,29 @@ class HistoricoTab:
         style.configure("Dashboard.Treeview.Heading", background=theme.SURFACE_ALT[0], foreground=theme.TEXT_MUTED[0], borderwidth=0, rowheight=35)
         style.map("Dashboard.Treeview", background=[("selected", theme.ACCENT[0])], foreground=[("selected", "white")])
 
+        # Tags nativas do Treeview para colorir o texto da linha por estado
+        # (substituem as pills flutuantes que desalinhavam noutros monitores/escalas)
+        self.tab_tree.tag_configure("tag_ok",      foreground=theme.SUCCESS[0])
+        self.tab_tree.tag_configure("tag_run",     foreground=theme.TEAL[0])
+        self.tab_tree.tag_configure("tag_bad",     foreground=theme.CRITICAL[0])
+        self.tab_tree.tag_configure("tag_neutral", foreground=theme.TEXT_MUTED[0])
+
     def carregar_combos_filtro(self):
         logs = ProducaoService.obter_todos()
-        maquinas = ["Todas"] + sorted(list(set(l.get("maquina", "") for l in logs if l.get("maquina"))))
+        maquinas_db = JSONManager.carregar(ARQUIVO_MAQUINAS) if os.path.exists(ARQUIVO_MAQUINAS) else []
+        _id_para_nome_combo = {
+            m.get("id"): m.get("nome")
+            for m in maquinas_db if isinstance(m, dict) and m.get("id") and m.get("nome")
+        }
+        nomes_maquinas = set()
+        for l in logs:
+            nome = (
+                l.get("maquina") or
+                _id_para_nome_combo.get(l.get("id_maquina", ""), l.get("id_maquina", ""))
+            )
+            if nome:
+                nomes_maquinas.add(nome)
+        maquinas = ["Todas"] + sorted(nomes_maquinas)
         self.flt_maq.configure(values=maquinas)
         self.flt_maq.set("Todas")
 
@@ -180,17 +196,34 @@ class HistoricoTab:
         logs = ProducaoService.obter_todos()
         pedidos_db = JSONManager.carregar(ARQUIVO_PEDIDOS) if os.path.exists(ARQUIVO_PEDIDOS) else []
 
-        pill_dados = {}
+        # Lookup: id_maquina legacy ("X1C-2") -> nome completo ("Bambu Lab X1C #2")
+        maquinas_db = JSONManager.carregar(ARQUIVO_MAQUINAS) if os.path.exists(ARQUIVO_MAQUINAS) else []
+        _id_para_nome = {
+            m.get("id"): m.get("nome")
+            for m in maquinas_db if isinstance(m, dict) and m.get("id") and m.get("nome")
+        }
 
         for l in logs:
             # --- 1. INTEGRAÇÃO N:N (PROJETO E MATERIAL) ---
-            if "pedidos_vinculados" in l and isinstance(l["pedidos_vinculados"], list) and l["pedidos_vinculados"]:
-                vinculos = l["pedidos_vinculados"]
+            vinculos_raw = l.get("pedidos_vinculados", [])
+            if isinstance(vinculos_raw, list) and vinculos_raw:
+                # Normaliza IDs para int para garantir match mesmo com dados legacy em string
+                vinculos_int = set()
+                for v in vinculos_raw:
+                    try:
+                        vinculos_int.add(int(v))
+                    except (TypeError, ValueError):
+                        pass
+
                 projetos_set = set()
                 materiais_set = set()
 
                 for p in pedidos_db:
-                    if p.get("id") in vinculos:
+                    try:
+                        pid = int(p.get("id", -1))
+                    except (TypeError, ValueError):
+                        pid = -1
+                    if pid in vinculos_int:
                         nr_proj = p.get("nr_projeto", "")
                         nome_proj = p.get("nome_projeto", "")
                         proj_str = f"{nr_proj} - {nome_proj}" if nome_proj else str(nr_proj)
@@ -202,8 +235,24 @@ class HistoricoTab:
                 projeto_final = " | ".join(projetos_set) if projetos_set else "Sem Projeto"
                 material_final = " | ".join(materiais_set) if materiais_set else "N/A"
             else:
-                projeto_final = str(l.get("nr_projeto", ""))
-                material_final = str(l.get("material", ""))
+                # --- COMPATIBILIDADE COM DADOS LEGACY ---
+                # Tenta vários nomes de campo que versões anteriores podiam usar
+                projeto_final = str(
+                    l.get("nr_projeto") or
+                    l.get("projeto") or
+                    l.get("projeto_nr") or
+                    ""
+                )
+                nome_proj_leg = l.get("nome_projeto", "")
+                if projeto_final and nome_proj_leg:
+                    projeto_final = f"{projeto_final} - {nome_proj_leg}"
+
+                material_final = str(
+                    l.get("material") or
+                    l.get("material_tipo") or
+                    l.get("filamento") or
+                    ""
+                )
 
             # --- 2. FILTROS DE TEXTO ---
             if proj_q and proj_q not in projeto_final.lower(): continue
@@ -211,7 +260,11 @@ class HistoricoTab:
             if cod_q and cod_q not in str(l.get("erro", "")).lower(): continue
             
             # --- 3. FILTROS DE COMBOBOX E ESTADO ---
-            maquina_log = l.get("maquina", "")
+            # Compatibilidade legacy: resolve "id_maquina" (ex: "X1C-2") para o nome completo
+            maquina_log = (
+                l.get("maquina") or
+                _id_para_nome.get(l.get("id_maquina", ""), l.get("id_maquina", ""))
+            )
             if maq_q != "Todas" and maquina_log != maq_q: continue
 
             estado_log = l.get("estado", "Em Andamento")
@@ -227,21 +280,35 @@ class HistoricoTab:
                 if d_fim and log_data > d_fim: continue
 
             # --- 5. ADICIONAR À TABELA ---
-            tempo_mostrar = l.get("tempo_real", l.get("tempo_estimado", "00:00"))
-            qtd_mostrar = l.get("quantidade_real", l.get("quantidade_consumida", 0.0))
+            # Compatibilidade legacy: "hora_maquina" era o nome antigo de "tempo_estimado"
+            tempo_mostrar = (
+                l.get("tempo_real") or
+                l.get("tempo_estimado") or
+                l.get("hora_maquina") or
+                l.get("tempo") or
+                "00:00"
+            )
+            # Compatibilidade legacy: "quantidade" era o nome antigo de "quantidade_consumida"
+            qtd_mostrar = (
+                l.get("quantidade_real") or
+                l.get("quantidade_consumida") or
+                l.get("quantidade") or
+                0.0
+            )
 
             # Formata a data para a tabela (esconde a hora se existir)
             data_tabela = log_data_str.split(" ")[0] if " " in log_data_str else log_data_str
 
             # "—" para produções ainda por fechar, para distinguir de um campo em branco
-            operador_log = l.get("operador", "") or "—"
+            # Compatibilidade legacy: "responsavel" era o nome antigo de "operador"
+            operador_log = l.get("operador") or l.get("responsavel") or "—"
             verificado_log = l.get("verificado_por", "") or "—"
 
-            item_id = self.tab_tree.insert("", "end", values=(
+            tag_linha = "tag_" + _VARIANTE_ESTADO.get(estado_log, "neutral")
+            self.tab_tree.insert("", "end", tags=(tag_linha,), values=(
                 ProducaoService.formatar_codigo(l.get("id")), data_tabela, projeto_final, maquina_log,
                 material_final, qtd_mostrar, tempo_mostrar, estado_log, operador_log, verificado_log
             ))
-            pill_dados[item_id] = (estado_log, _VARIANTE_ESTADO.get(estado_log, "neutral"))
 
 
             # Cálculos de KPI focados apenas nas peças listadas no ecrã
@@ -258,7 +325,6 @@ class HistoricoTab:
         self.lbl_kpi_total.configure(text=str(total_filtradas))
         self.lbl_kpi_taxa.configure(text=f"{taxa:.1f}%")
         self.lbl_kpi_horas.configure(text=ProducaoService.converter_para_string(total_horas))
-        self.estado_pills.definir_dados(pill_dados)
 
     def exportar_csv(self):
         caminho_salvar = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV", "*.csv")])

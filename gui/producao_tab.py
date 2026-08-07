@@ -224,7 +224,9 @@ class ProducaoTab:
                     nome = imp.get("nome", "Desconhecida")
                     st = imp.get("estado", "Ativa")
                     
-                    if t == tech_atual and st not in ["Inativa", "Manutenção"]:
+                    st_lower = st.lower()
+                    inativa = "inativa" in st_lower or "manutenção" in st_lower or "manutencao" in st_lower
+                    if t == tech_atual and not inativa:
                         maquinas_compativeis.append(nome)
                 elif isinstance(imp, str):
                     maquinas_compativeis.append(imp)

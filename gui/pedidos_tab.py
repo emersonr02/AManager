@@ -78,16 +78,17 @@ class PedidosTab:
 
         self.configurar_estilo_tabela()
 
-        # Criado depois da scrollbar: precisa de "envolver" o yscrollcommand já
-        # ligado ao sb_ped.set, para saber repor as pills sempre que a vista faz scroll.
-        self.status_pills = theme.TreeviewPillColumn(self.tree_pedidos, "status")
-
     def configurar_estilo_tabela(self):
         style = ttk.Style()
         style.theme_use("default")
         style.configure("Custom.Treeview", background=theme.SURFACE[0], foreground=theme.TEXT[0], rowheight=30, fieldbackground=theme.SURFACE[0], borderwidth=0)
         style.configure("Custom.Treeview.Heading", background=theme.SURFACE_ALT[0], foreground=theme.TEXT_MUTED[0], borderwidth=0)
         style.map("Custom.Treeview", background=[("selected", theme.ACCENT[0])], foreground=[("selected", "white")])
+        # Tags nativas para colorir o texto por estado (substituem as pills flutuantes)
+        self.tree_pedidos.tag_configure("tag_ok",      foreground=theme.SUCCESS[0])
+        self.tree_pedidos.tag_configure("tag_run",     foreground=theme.TEAL[0])
+        self.tree_pedidos.tag_configure("tag_bad",     foreground=theme.CRITICAL[0])
+        self.tree_pedidos.tag_configure("tag_neutral", foreground=theme.TEXT_MUTED[0])
 
     def atualizar_tabela(self):
         for i in self.tree_pedidos.get_children(): self.tree_pedidos.delete(i)
@@ -95,8 +96,6 @@ class PedidosTab:
         pedidos = JSONManager.carregar(ARQUIVO_PEDIDOS) if os.path.exists(ARQUIVO_PEDIDOS) else []
         
         total_ativos, andamento, entregues = 0, 0, 0
-        
-        pill_dados = {}
 
         for p in pedidos:
             # SOFT DELETE: Ignora pedidos marcados como inativos ou cancelados
@@ -109,16 +108,15 @@ class PedidosTab:
             if status == "Em Andamento": andamento += 1
             if status in ["Entregue", "Concluído"]: entregues += 1
 
-            item_id = self.tree_pedidos.insert("", "end", values=(
+            tag_linha = "tag_" + _VARIANTE_ESTADO.get(status, "neutral")
+            self.tree_pedidos.insert("", "end", tags=(tag_linha,), values=(
                 PedidoService.formatar_codigo(p.get("id")), p.get("data_pedido"), p.get("requerente_email"),
                 p.get("nr_projeto"), status, p.get("tecnologia")
             ))
-            pill_dados[item_id] = (status, _VARIANTE_ESTADO.get(status, "neutral"))
 
         self.lbl_kpi_total.configure(text=str(total_ativos))
         self.lbl_kpi_andamento.configure(text=str(andamento))
         self.lbl_kpi_entregues.configure(text=str(entregues))
-        self.status_pills.definir_dados(pill_dados)
 
     def mostrar_menu_contexto(self, event):
         item = self.tree_pedidos.identify_row(event.y)

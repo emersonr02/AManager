@@ -39,6 +39,7 @@ class JanelaGestaoProjetosMateriais(ctk.CTkToplevel):
         style.configure("Gestao.Treeview", background=theme.SURFACE[0], foreground=theme.TEXT[0], rowheight=28, fieldbackground=theme.SURFACE[0], borderwidth=0)
         style.configure("Gestao.Treeview.Heading", background=theme.SURFACE_ALT[0], foreground=theme.TEXT_MUTED[0], borderwidth=0)
         style.map("Gestao.Treeview", background=[("selected", theme.ACCENT[0])], foreground=[("selected", "white")])
+        # As tags são configuradas após a criação das trees, em _configurar_tags_trees()
 
     # ==========================================
     # PROJETOS
@@ -61,7 +62,8 @@ class JanelaGestaoProjetosMateriais(ctk.CTkToplevel):
             self.tree_proj.column(c, width=w, anchor=anchors[c])
         self.tree_proj.pack(fill="both", expand=True, pady=10)
         self.tree_proj.bind("<Double-1>", self.editar_projeto_selecionado)
-        self.proj_pills = theme.TreeviewPillColumn(self.tree_proj, "estado")
+        self.tree_proj.tag_configure("tag_ok",      foreground=theme.SUCCESS[0])
+        self.tree_proj.tag_configure("tag_neutral", foreground=theme.TEXT_MUTED[0])
 
         frm_acoes = ctk.CTkFrame(self.tab_proj, fg_color="transparent")
         frm_acoes.pack(fill="x", pady=(0, 10))
@@ -73,12 +75,10 @@ class JanelaGestaoProjetosMateriais(ctk.CTkToplevel):
     def atualizar_lista_projetos(self):
         for i in self.tree_proj.get_children():
             self.tree_proj.delete(i)
-        pill_dados = {}
         for p in ProjetoService.obter_todos(incluir_inativos=True):
             estado = "Ativo" if p.get("ativo", True) else "Inativo"
-            item_id = self.tree_proj.insert("", "end", values=(p["id"], p["nome"], estado))
-            pill_dados[item_id] = (estado, _VARIANTE_ATIVO[estado])
-        self.proj_pills.definir_dados(pill_dados)
+            tag = "tag_ok" if estado == "Ativo" else "tag_neutral"
+            self.tree_proj.insert("", "end", tags=(tag,), values=(p["id"], p["nome"], estado))
 
     def adicionar_projeto(self):
         id_val = self.ent_proj_id.get().strip()
@@ -175,7 +175,8 @@ class JanelaGestaoProjetosMateriais(ctk.CTkToplevel):
             self.tree_mat.column(c, width=w, anchor=anchors[c])
         self.tree_mat.pack(fill="both", expand=True, pady=10)
         self.tree_mat.bind("<Double-1>", self.editar_material_selecionado)
-        self.mat_pills = theme.TreeviewPillColumn(self.tree_mat, "estado")
+        self.tree_mat.tag_configure("tag_ok",      foreground=theme.SUCCESS[0])
+        self.tree_mat.tag_configure("tag_neutral", foreground=theme.TEXT_MUTED[0])
 
         frm_acoes = ctk.CTkFrame(self.tab_mat, fg_color="transparent")
         frm_acoes.pack(fill="x", pady=(0, 10))
@@ -187,12 +188,10 @@ class JanelaGestaoProjetosMateriais(ctk.CTkToplevel):
     def atualizar_lista_materiais(self):
         for i in self.tree_mat.get_children():
             self.tree_mat.delete(i)
-        pill_dados = {}
         for m in MaterialService.obter_todos(incluir_inativos=True):
             estado = "Ativo" if m.get("ativo", True) else "Inativo"
-            item_id = self.tree_mat.insert("", "end", values=(m["nome"], m["fabricante"], estado))
-            pill_dados[item_id] = (estado, _VARIANTE_ATIVO[estado])
-        self.mat_pills.definir_dados(pill_dados)
+            tag = "tag_ok" if estado == "Ativo" else "tag_neutral"
+            self.tree_mat.insert("", "end", tags=(tag,), values=(m["nome"], m["fabricante"], estado))
 
     def adicionar_material(self):
         nome = self.ent_mat_nome.get().strip()

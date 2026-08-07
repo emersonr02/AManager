@@ -51,10 +51,14 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         self.material_fmt = " | ".join(materiais_set) if materiais_set else self.log.get("material", "N/A")
         
         # 2. Dados Base
-        self.maquina = self.log.get("maquina", "N/A")
+        self.maquina = self.log.get("maquina") or self.log.get("id_maquina", "N/A")
         self.tecnologia = self.log.get("tecnologia", "FDM")
-        self.tempo_est = self.log.get("tempo_estimado", self.log.get("tempo", "00:00"))
-        self.responsavel = self.log.get("operador", "N/A")
+        self.tempo_est = (
+            self.log.get("tempo_estimado") or
+            self.log.get("tempo") or
+            "00:00"
+        )
+        self.responsavel = self.log.get("operador") or self.log.get("responsavel", "N/A")
         
         # 3. Lógica de Quantidades e SLS
         if self.tecnologia == "SLS":
@@ -80,7 +84,12 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
                 self.qtd_est = "Erro no Cálculo"
                 self.qtd_raw = 0.0
         else:
-            self.qtd_raw = self.log.get("quantidade_consumida", 0.0)
+            # Compatibilidade legacy: "quantidade" era o nome antigo de "quantidade_consumida"
+            self.qtd_raw = (
+                self.log.get("quantidade_consumida") or
+                self.log.get("quantidade") or
+                0.0
+            )
             self.qtd_est = str(self.qtd_raw)
 
     def construir_layout(self):
