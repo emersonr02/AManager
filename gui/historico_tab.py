@@ -4,9 +4,10 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import os
 
-from config.paths import ARQUIVO_PEDIDOS, ARQUIVO_MAQUINAS
+from config.paths import ARQUIVO_MAQUINAS
 from database.json_manager import JSONManager
 from services.producao_service import ProducaoService
+from services.pedido_service import PedidoService
 from services.export_service import ExportService
 from gui.dialogs.fechar_ordem import JanelaFecharOrdem
 from gui import theme
@@ -172,105 +173,114 @@ class HistoricoTab:
         except ValueError:
             return None
 
+    # ------------------------------------------------------------------ #
+    #  HELPERS PRIVADOS                                                    #
+    # ------------------------------------------------------------------ #
+
+    def _resolver_projeto_material(self, log: dict, pedidos_db: list) -> tuple[str, str]:
+        """Devolve (projeto_final, material_final) para uma linha de produção,
+        com suporte completo a dados legacy."""
+        vinculos_raw = log.get("pedidos_vinculados", [])
+        if isinstance(vinculos_raw, list) and vinculos_raw:
+            vinculos_int = set()
+            for v in vinculos_raw:
+                try:
+                    vinculos_int.add(int(v))
+                except (TypeError, ValueError):
+                    pass
+            projetos_set, materiais_set = set(), set()
+            for p in pedidos_db:
+                try:
+                    pid = int(p.get("id", -1))
+                except (TypeError, ValueError):
+                    pid = -1
+                if pid in vinculos_int:
+                    nr  = p.get("nr_projeto", "")
+                    nom = p.get("nome_projeto", "")
+                    proj_str = f"{nr} - {nom}" if nom else str(nr)
+                    if proj_str:
+                        projetos_set.add(proj_str)
+                    for peca in p.get("pecas", []):
+                        if peca.get("material"):
+                            materiais_set.add(peca["material"])
+            return (
+                " | ".join(projetos_set) if projetos_set else "Sem Projeto",
+                " | ".join(materiais_set) if materiais_set else "N/A",
+            )
+        # Legacy
+        projeto = str(log.get("nr_projeto") or log.get("projeto") or log.get("projeto_nr") or "")
+        nome_leg = log.get("nome_projeto", "")
+        if projeto and nome_leg:
+            projeto = f"{projeto} - {nome_leg}"
+        material = str(log.get("material") or log.get("material_tipo") or log.get("filamento") or "")
+        return projeto, material
+
+    def _passa_filtros(self, log: dict, projeto: str, material: str,
+                       filtros: dict, id_para_nome: dict) -> bool:
+        """Verifica se uma linha passa em todos os filtros activos."""
+        if filtros["proj"] and filtros["proj"] not in projeto.lower():
+            return False
+        if filtros["mat"] and filtros["mat"] not in material.lower():
+            return False
+        if filtros["cod"] and filtros["cod"] not in str(log.get("erro", "")).lower():
+            return False
+        maquina = ProducaoService.normalizar_maquina(log, id_para_nome)
+        if filtros["maq"] != "Todas" and maquina != filtros["maq"]:
+            return False
+        estado = log.get("estado", "Em Andamento")
+        if estado == "Falha":      estado = "Cancelada"
+        if estado == "A Imprimir": estado = "Em Andamento"
+        if filtros["est"] != "Todos" and estado != filtros["est"]:
+            return False
+        log_data = self.parse_data_segura(log.get("data_inicio", ""))
+        if log_data:
+            if filtros["d_ini"] and log_data < filtros["d_ini"]:
+                return False
+            if filtros["d_fim"] and log_data > filtros["d_fim"]:
+                return False
+        return True
+
+    # ------------------------------------------------------------------ #
+    #  TABELA PRINCIPAL                                                    #
+    # ------------------------------------------------------------------ #
+
     def atualizar_tabela(self):
-        for i in self.tab_tree.get_children(): 
+        for i in self.tab_tree.get_children():
             self.tab_tree.delete(i)
-        
-        proj_q = self.flt_p.get().lower()
-        mat_q = self.flt_m.get().lower()
-        cod_q = self.flt_cod.get().lower()
-        maq_q = self.flt_maq.get()
-        est_q = self.flt_estado.get()
-        
-        d_ini = self.parse_data_segura(self.flt_data_ini.get())
-        d_fim = self.parse_data_segura(self.flt_data_fim.get())
 
-        total_filtradas = 0
-        sucesso_pecas = 0
-        pecas_finalizadas = 0
-        total_horas = 0.0
+        filtros = {
+            "proj":  self.flt_p.get().lower(),
+            "mat":   self.flt_m.get().lower(),
+            "cod":   self.flt_cod.get().lower(),
+            "maq":   self.flt_maq.get(),
+            "est":   self.flt_estado.get(),
+            "d_ini": self.parse_data_segura(self.flt_data_ini.get()),
+            "d_fim": self.parse_data_segura(self.flt_data_fim.get()),
+        }
 
-        logs = ProducaoService.obter_todos()
-        pedidos_db = JSONManager.carregar(ARQUIVO_PEDIDOS) if os.path.exists(ARQUIVO_PEDIDOS) else []
-
-        # Lookup: id_maquina legacy ("X1C-2") -> nome completo ("Bambu Lab X1C #2")
+        logs       = ProducaoService.obter_todos()
+        pedidos_db = PedidoService.obter_todos()
         maquinas_db = JSONManager.carregar(ARQUIVO_MAQUINAS) if os.path.exists(ARQUIVO_MAQUINAS) else []
         _id_para_nome = {
             m.get("id"): m.get("nome")
             for m in maquinas_db if isinstance(m, dict) and m.get("id") and m.get("nome")
         }
 
+        total_filtradas = sucesso_pecas = pecas_finalizadas = 0
+        total_horas = 0.0
+
         for l in logs:
-            # --- 1. INTEGRAÇÃO N:N (PROJETO E MATERIAL) ---
-            vinculos_raw = l.get("pedidos_vinculados", [])
-            if isinstance(vinculos_raw, list) and vinculos_raw:
-                # Normaliza IDs para int para garantir match mesmo com dados legacy em string
-                vinculos_int = set()
-                for v in vinculos_raw:
-                    try:
-                        vinculos_int.add(int(v))
-                    except (TypeError, ValueError):
-                        pass
+            projeto_final, material_final = self._resolver_projeto_material(l, pedidos_db)
 
-                projetos_set = set()
-                materiais_set = set()
+            if not self._passa_filtros(l, projeto_final, material_final, filtros, _id_para_nome):
+                continue
 
-                for p in pedidos_db:
-                    try:
-                        pid = int(p.get("id", -1))
-                    except (TypeError, ValueError):
-                        pid = -1
-                    if pid in vinculos_int:
-                        nr_proj = p.get("nr_projeto", "")
-                        nome_proj = p.get("nome_projeto", "")
-                        proj_str = f"{nr_proj} - {nome_proj}" if nome_proj else str(nr_proj)
-                        if proj_str: projetos_set.add(proj_str)
-
-                        for peca in p.get("pecas", []):
-                            if peca.get("material"): materiais_set.add(peca["material"])
-
-                projeto_final = " | ".join(projetos_set) if projetos_set else "Sem Projeto"
-                material_final = " | ".join(materiais_set) if materiais_set else "N/A"
-            else:
-                # --- COMPATIBILIDADE COM DADOS LEGACY ---
-                # Tenta vários nomes de campo que versões anteriores podiam usar
-                projeto_final = str(
-                    l.get("nr_projeto") or
-                    l.get("projeto") or
-                    l.get("projeto_nr") or
-                    ""
-                )
-                nome_proj_leg = l.get("nome_projeto", "")
-                if projeto_final and nome_proj_leg:
-                    projeto_final = f"{projeto_final} - {nome_proj_leg}"
-
-                material_final = str(
-                    l.get("material") or
-                    l.get("material_tipo") or
-                    l.get("filamento") or
-                    ""
-                )
-
-            # --- 2. FILTROS DE TEXTO ---
-            if proj_q and proj_q not in projeto_final.lower(): continue
-            if mat_q and mat_q not in material_final.lower(): continue
-            if cod_q and cod_q not in str(l.get("erro", "")).lower(): continue
-            
-            # --- 3. FILTROS DE COMBOBOX E ESTADO ---
-            maquina_log = ProducaoService.normalizar_maquina(l, _id_para_nome)
-            if maq_q != "Todas" and maquina_log != maq_q: continue
-
-            estado_log = l.get("estado", "Em Andamento")
-            if estado_log == "Falha": estado_log = "Cancelada"
-            if estado_log == "A Imprimir": estado_log = "Em Andamento" # Uniformizar filtros
-            if est_q != "Todos" and estado_log != est_q: continue
-
-            # --- 4. FILTROS DE DATA ---
+            # ── Campos para exibição ──────────────────────────────────────
+            maquina_log  = ProducaoService.normalizar_maquina(l, _id_para_nome)
+            estado_log   = l.get("estado", "Em Andamento")
+            if estado_log == "Falha":      estado_log = "Cancelada"
+            if estado_log == "A Imprimir": estado_log = "Em Andamento"
             log_data_str = l.get("data_inicio", "")
-            log_data = self.parse_data_segura(log_data_str)
-            if log_data:
-                if d_ini and log_data < d_ini: continue
-                if d_fim and log_data > d_fim: continue
 
             # --- 5. ADICIONAR À TABELA ---
             # normalizar_tempo converte todos os formatos legacy para HH:MM
@@ -321,7 +331,7 @@ class HistoricoTab:
         # na tabela (respeita os filtros ativos), não só as colunas mostradas.
         ids_visiveis = {ProducaoService.extrair_id(self.tab_tree.item(i)['values'][0]) for i in self.tab_tree.get_children()}
         producoes = [p for p in ProducaoService.obter_todos() if p.get("id") in ids_visiveis]
-        pedidos_db = JSONManager.carregar(ARQUIVO_PEDIDOS) if os.path.exists(ARQUIVO_PEDIDOS) else []
+        pedidos_db = PedidoService.obter_todos()
 
         if ExportService.exportar_historico_csv(caminho_salvar, producoes, pedidos_db):
             messagebox.showinfo("Sucesso", "Exportação de auditoria concluída.")

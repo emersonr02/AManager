@@ -110,6 +110,133 @@ class PedidoService:
 
         JSONManager.atualizar(ARQUIVO_PEDIDOS, _transformar)
 
+
+    @staticmethod
+    def importar_de_email(texto: str, lista_projetos_fmt: list, lista_materiais_fmt: list) -> dict:
+        """Extrai campos de um email estruturado e devolve um dicionário com os
+        dados pré-preenchidos para a UI. Não guarda nada — apenas faz parsing.
+        Retorna: {requerente, nr_projeto, nome_projeto, tecnologia, data_entrega,
+                  link_arquivos, observacoes, pecas: [{pn, material, qtd}]}"""
+        import re
+        from datetime import datetime
+
+        padrao = r"(?i)(TAREFA:|PROJETO:|RESPONSÁVEL:|REQUERENTE:|LINK FICHEIROS:|CRITÉRIOS DE ACEITAÇÃO:|PRAZO DE ENTREGA:|OBSERVAÇÕES:|LISTA DE PEÇAS:)"
+        partes = re.split(padrao, texto)
+
+        dados: dict = {}
+        chave = None
+        for p in partes:
+            limpo = p.strip()
+            if not limpo:
+                continue
+            if re.match(padrao, limpo):
+                chave = limpo.upper().replace(":", "")
+                dados[chave] = ""
+            elif chave:
+                dados[chave] += limpo + " "
+
+        # ── Projeto ──────────────────────────────────────────────────────
+        proj_extraido = dados.get("PROJETO", "").strip()
+        link = dados.get("LINK FICHEIROS", "").strip()
+        nr_proj = nome_proj = ""
+        for p_fmt in lista_projetos_fmt:
+            if p_fmt == "Sem projetos registados":
+                continue
+            if proj_extraido and proj_extraido.lower() in p_fmt.lower():
+                partes_p = p_fmt.split(" - ", 1)
+                nr_proj, nome_proj = partes_p[0], (partes_p[1] if len(partes_p) > 1 else "")
+                break
+        if not nr_proj and link:
+            for p_fmt in lista_projetos_fmt:
+                if p_fmt == "Sem projetos registados":
+                    continue
+                nome_p = p_fmt.split(" - ")[-1]
+                palavras = [w.lower() for w in nome_p.split() if len(w) > 3]
+                if any(w in link.lower() for w in palavras):
+                    partes_p = p_fmt.split(" - ", 1)
+                    nr_proj, nome_proj = partes_p[0], (partes_p[1] if len(partes_p) > 1 else "")
+                    break
+
+        # ── Data de entrega ───────────────────────────────────────────────
+        prazo_raw = dados.get("PRAZO DE ENTREGA", "").strip()
+        data_entrega = ""
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
+            try:
+                data_entrega = datetime.strptime(prazo_raw, fmt).strftime("%Y-%m-%d")
+                break
+            except ValueError:
+                continue
+        if not data_entrega:
+            data_entrega = prazo_raw  # guarda o raw para a UI mostrar erro
+
+        # ── Tecnologia + observações ──────────────────────────────────────
+        obs_raw = dados.get("OBSERVAÇÕES", "").strip()
+        crit    = dados.get("CRITÉRIOS DE ACEITAÇÃO", "").strip()
+
+        obs_upper = obs_raw.upper()
+        tecnologia = ("SLS" if "SLS" in obs_upper else
+                      "SLA" if "SLA" in obs_upper else "FDM")
+
+        partes_obs = [p.strip() for p in obs_raw.replace("\n", ";").split(";") if p.strip()]
+        material_inferido = ""
+        obs_restantes = []
+        for p in partes_obs:
+            p_lower = p.lower()
+            if p_lower.startswith("tecnologia"):
+                continue
+            elif p_lower.startswith("material") and ":" in p:
+                material_inferido = p.split(":", 1)[1].strip()
+            else:
+                obs_restantes.append(p)
+
+        obs_final = ""
+        if crit:
+            obs_final += f"Critérios de Aceitação: {crit}\n"
+        if obs_restantes:
+            obs_final += "; ".join(obs_restantes)
+
+        # ── Lista de peças ────────────────────────────────────────────────
+        pn_inferido = link.replace("/", "\\").split("\\")[-1] if link else ""
+        texto_pecas = dados.get("LISTA DE PEÇAS", "").strip()
+        pecas: list[dict] = []
+
+        def _match_material(nome: str) -> str:
+            for m_fmt in lista_materiais_fmt:
+                if nome.lower() in m_fmt.lower():
+                    return m_fmt
+            return nome
+
+        if texto_pecas:
+            segs = [s.strip() for s in texto_pecas.split(";") if s.strip()]
+            pn_atual = segs[0] if segs else "S/N"
+            idx = 1
+            while idx < len(segs):
+                mat_atual = segs[idx]
+                qtd_raw = segs[idx + 1] if (idx + 1) < len(segs) else "1"
+                m = re.match(r"^(\d+)\s*(.*)$", qtd_raw)
+                qtd_atual  = m.group(1) if m else "1"
+                pn_proximo = m.group(2).strip() if m else qtd_raw.strip()
+                pecas.append({"pn": pn_atual, "material": _match_material(mat_atual),
+                              "qtd": qtd_atual})
+                pn_atual = pn_proximo
+                idx += 2
+                if not pn_atual and idx < len(segs):
+                    pn_atual = segs[idx]
+                    idx += 1
+        elif material_inferido or pn_inferido:
+            pecas.append({"pn": pn_inferido, "material": _match_material(material_inferido),
+                          "qtd": "1"})
+
+        return {
+            "nr_projeto":   nr_proj,
+            "nome_projeto": nome_proj,
+            "tecnologia":   tecnologia,
+            "data_entrega": data_entrega,
+            "link_arquivos": link,
+            "observacoes":  obs_final.strip(),
+            "pecas":        pecas,
+        }
+
     @staticmethod
     def vincular_producao(ids_pedidos: list, id_producao):
         """Liga uma produção aos pedidos que ela cobre: regista o id da
