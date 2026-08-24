@@ -9,8 +9,16 @@ class MaquinaService:
         return JSONManager.carregar(ARQUIVO_MAQUINAS)
 
     @staticmethod
+    def obter_lookup_id_nome() -> dict:
+        """Devolve um dict {id_maquina: nome} para resolução rápida de IDs legacy."""
+        return {
+            m.get("id"): m.get("nome")
+            for m in MaquinaService.obter_todas()
+            if isinstance(m, dict) and m.get("id") and m.get("nome")
+        }
+
+    @staticmethod
     def obter_ativas_por_tecnologia(tecnologia: str):
-        """Regra de negócio: Retorna apenas IDs de máquinas operacionais de uma tecnologia específica."""
         maquinas = JSONManager.carregar(ARQUIVO_MAQUINAS)
         return [m["id"] for m in maquinas if m.get("tech") == tecnologia and m.get("estado") == "Operacional"]
 

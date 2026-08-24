@@ -3,8 +3,6 @@ import tkinter as tk
 from tkinter import messagebox
 import os
 from datetime import datetime
-from database.json_manager import JSONManager
-from config.paths import ARQUIVO_PEDIDOS
 from services.producao_service import ProducaoService
 from services.pedido_service import PedidoService
 from services.nc_service import NCService
@@ -31,7 +29,7 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         self.construir_layout()
 
     def extrair_dados_dinamicos(self):
-        pedidos_db = JSONManager.carregar(ARQUIVO_PEDIDOS) if os.path.exists(ARQUIVO_PEDIDOS) else []
+        pedidos_db = PedidoService.obter_todos()
         vinculos = self.log.get("pedidos_vinculados", [])
         
         materiais_set = set()

@@ -5,7 +5,8 @@ import os
 from database.json_manager import JSONManager
 from services.pedido_service import PedidoService
 from services.producao_service import ProducaoService
-from config.paths import ARQUIVO_LOGS, ARQUIVO_MAQUINAS
+from config.paths import ARQUIVO_LOGS
+from services.maquina_service import MaquinaService
 from gui import theme
 
 class ProducaoTab:
@@ -211,9 +212,9 @@ class ProducaoTab:
             return
 
         try:
-            impressoras = JSONManager.carregar(caminho_final)
+            impressoras = MaquinaService.obter_todas()
             maquinas_compativeis = []
-            
+
             for imp in impressoras:
                 if isinstance(imp, dict):
                     t = imp.get("tech", tech_atual)

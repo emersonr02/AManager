@@ -30,6 +30,14 @@ class PedidoService:
         return pedidos
 
     @staticmethod
+    def obter_por_id(id_pedido):
+        """Devolve o pedido com o id indicado, ou None se não existir."""
+        for p in PedidoService.obter_todos():
+            if p.get("id") == id_pedido:
+                return p
+        return None
+
+    @staticmethod
     def criar_pedido(requerente_email: str, nr_projeto: str, nome_projeto: str, tecnologia: str,
                       data_entrega: str, link_arquivos: str, observacoes: str, pecas: list):
         """Aplica a regra de negócio para gerar um novo ID e salvar o pedido."""

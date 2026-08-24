@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import os
 
-from config.paths import ARQUIVO_MAQUINAS
+from services.maquina_service import MaquinaService
 from database.json_manager import JSONManager
 from services.producao_service import ProducaoService
 from services.pedido_service import PedidoService
@@ -139,11 +139,7 @@ class HistoricoTab:
 
     def carregar_combos_filtro(self):
         logs = ProducaoService.obter_todos()
-        maquinas_db = JSONManager.carregar(ARQUIVO_MAQUINAS) if os.path.exists(ARQUIVO_MAQUINAS) else []
-        _id_para_nome_combo = {
-            m.get("id"): m.get("nome")
-            for m in maquinas_db if isinstance(m, dict) and m.get("id") and m.get("nome")
-        }
+        _id_para_nome_combo = MaquinaService.obter_lookup_id_nome()
         nomes_maquinas = set()
         for l in logs:
             nome = ProducaoService.normalizar_maquina(l, _id_para_nome_combo)
@@ -260,11 +256,7 @@ class HistoricoTab:
 
         logs       = ProducaoService.obter_todos()
         pedidos_db = PedidoService.obter_todos()
-        maquinas_db = JSONManager.carregar(ARQUIVO_MAQUINAS) if os.path.exists(ARQUIVO_MAQUINAS) else []
-        _id_para_nome = {
-            m.get("id"): m.get("nome")
-            for m in maquinas_db if isinstance(m, dict) and m.get("id") and m.get("nome")
-        }
+        _id_para_nome = MaquinaService.obter_lookup_id_nome()
 
         total_filtradas = sucesso_pecas = pecas_finalizadas = 0
         total_horas = 0.0

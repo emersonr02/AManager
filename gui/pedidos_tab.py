@@ -1,9 +1,6 @@
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import ttk, messagebox
-import os
-from database.json_manager import JSONManager
-from config.paths import ARQUIVO_PEDIDOS
 from services.pedido_service import PedidoService
 from gui.dialogs.novo_pedido import JanelaNovoPedido
 from gui.dialogs.editar_pedido import JanelaEditarPedido
@@ -93,7 +90,7 @@ class PedidosTab:
     def atualizar_tabela(self):
         for i in self.tree_pedidos.get_children(): self.tree_pedidos.delete(i)
         
-        pedidos = JSONManager.carregar(ARQUIVO_PEDIDOS) if os.path.exists(ARQUIVO_PEDIDOS) else []
+        pedidos = PedidoService.obter_todos()
         
         total_ativos, andamento, entregues = 0, 0, 0
 
@@ -176,11 +173,9 @@ class PedidosTab:
         if not sel: return
         id_ped = PedidoService.extrair_id(self.tree_pedidos.item(sel[0])['values'][0])
 
-        pedidos = JSONManager.carregar(ARQUIVO_PEDIDOS)
-        for p in pedidos:
-            if p.get("id") == id_ped:
-                JanelaEditarPedido(self.parent.winfo_toplevel(), p, self.atualizar_tabela)
-                break
+        pedido = PedidoService.obter_por_id(id_ped)
+        if pedido:
+            JanelaEditarPedido(self.parent.winfo_toplevel(), pedido, self.atualizar_tabela)
 
     def abrir_dialogo_estado(self):
         sel = self.tree_pedidos.selection()
