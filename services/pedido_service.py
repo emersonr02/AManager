@@ -37,7 +37,7 @@ class PedidoService:
         novo_pedido = {}
 
         def _transformar(pedidos):
-            novo_id = max([p.get("id", 0) for p in pedidos]) + 1 if pedidos else 1
+            novo_id = max([int(p.get("id", 0)) for p in pedidos]) + 1 if pedidos else 1
             novo_pedido.update({
                 "id": novo_id,
                 "requerente_email": requerente_email,
@@ -117,13 +117,17 @@ class PedidoService:
         e marca os pedidos como Em Andamento."""
         hoje = datetime.now().strftime("%Y-%m-%d")
 
+        ESTADOS_FINAIS = {"Entregue", "Concluído"}
+
         def _transformar(pedidos):
             for p in pedidos:
                 if p.get("id") in ids_pedidos:
                     vinculadas = p.setdefault("producoes_vinculadas", [])
                     if id_producao not in vinculadas:
                         vinculadas.append(id_producao)
-                    p["estado"] = "Em Andamento"
+                    # Não reverte um pedido já entregue/concluído para "Em Andamento"
+                    if p.get("estado") not in ESTADOS_FINAIS:
+                        p["estado"] = "Em Andamento"
                     p["data_atualizacao"] = hoje
             return pedidos
 

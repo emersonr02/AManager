@@ -55,6 +55,7 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         self.tecnologia = self.log.get("tecnologia", "FDM")
         self.tempo_est = (
             self.log.get("tempo_estimado") or
+            self.log.get("hora_maquina") or   # compatibilidade legacy
             self.log.get("tempo") or
             "00:00"
         )
@@ -223,6 +224,14 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
 
         if not t_real or not q_real:
             messagebox.showerror("Erro", "Preencha o Tempo Real e a Quantidade Real antes de fechar a ordem.")
+            return
+
+        if not ProducaoService.validar_formato_tempo(t_real):
+            messagebox.showerror("Erro de Formato", "O Tempo Real deve estar no formato HH:MM (ex: 02:30).")
+            return
+
+        if not ProducaoService.validar_numero_positivo(q_real):
+            messagebox.showerror("Erro de Formato", "A Quantidade Real deve ser um número positivo válido.")
             return
 
         # Impede fechar a ordem se a qualidade não estiver aprovada (Opcional: podes remover este bloco se for permitido fechar sem os 3 checks)

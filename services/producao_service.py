@@ -172,8 +172,10 @@ class ProducaoService:
             novo["data_inicio"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             novo["estado"] = "Em Andamento"
             novo["erro"] = ""
-            novo.pop("tempo_real", None)
-            novo.pop("quantidade_real", None)
+            # Limpa todos os dados de fecho do original — o clone começa do zero
+            for campo in ("tempo_real", "quantidade_real", "verificado_por",
+                          "data_fecho", "nc_codigo", "controlo_qualidade"):
+                novo.pop(campo, None)
 
             producoes.append(novo)
             clone.update(novo)

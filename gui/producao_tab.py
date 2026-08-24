@@ -140,17 +140,13 @@ class ProducaoTab:
 
     def preencher_lote_anterior(self):
         if self.chk_var_lote.get():
-            if os.path.exists(ARQUIVO_LOGS):
-                producoes = JSONManager.carregar(ARQUIVO_LOGS)
-                lotes_sls = [p.get("lote_po") for p in producoes if p.get("tecnologia") == "SLS" and p.get("lote_po")]
-                
-                if lotes_sls:
-                    self.ent_lote.delete(0, 'end')
-                    self.ent_lote.insert(0, lotes_sls[-1])
-                    return
-            
-            self.chk_var_lote.set(False)
-            messagebox.showinfo("Info", "Nenhum registo de lote de pó anterior encontrado.")
+            lote = ProducaoService.obter_ultimo_lote_sls()
+            if lote:
+                self.ent_lote.delete(0, 'end')
+                self.ent_lote.insert(0, lote)
+            else:
+                self.chk_var_lote.set(False)
+                messagebox.showinfo("Info", "Nenhum registo de lote de pó anterior encontrado.")
         else:
             self.ent_lote.delete(0, 'end')
 
@@ -405,9 +401,8 @@ class ProducaoTab:
         # ==========================================
         # 3. GRAVAÇÃO DOS DADOS
         # ==========================================
-        # Vai buscar o utilizador com sessão iniciada no domínio (ex: "emerson.ribeiro"),
-        # em vez de um valor genérico fixo — fica registado quem lançou a produção.
         responsavel = os.environ.get("USERNAME", "Desconhecido")
+        quant = ""  # inicializado aqui para evitar UnboundLocalError se a lógica mudar
 
         campos_extra = {}
         if tech in ("FDM", "SLA"):
@@ -439,10 +434,10 @@ class ProducaoTab:
         
         self.ao_mudar_tecnologia(tech)
         self.ent_tempo.delete(0, 'end')
-        if hasattr(self, 'ent_quant'): self.ent_quant.delete(0, 'end')
-        if hasattr(self, 'ent_altura'): self.ent_altura.delete(0, 'end')
-        if hasattr(self, 'ent_perc'): self.ent_perc.delete(0, 'end')
-        if hasattr(self, 'ent_lote'): self.ent_lote.delete(0, 'end')
+        self.ent_quant.delete(0, 'end')
+        self.ent_altura.delete(0, 'end')
+        self.ent_perc.delete(0, 'end')
+        self.ent_lote.delete(0, 'end')
         
         for chk_var in self.fdm_vars.values(): chk_var.set(False)
         for chk_var in self.sla_vars.values(): chk_var.set(False)
