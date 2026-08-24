@@ -145,11 +145,8 @@ class HistoricoTab:
         }
         nomes_maquinas = set()
         for l in logs:
-            nome = (
-                l.get("maquina") or
-                _id_para_nome_combo.get(l.get("id_maquina", ""), l.get("id_maquina", ""))
-            )
-            if nome:
+            nome = ProducaoService.normalizar_maquina(l, _id_para_nome_combo)
+            if nome and not nome.startswith("Desconhecida"):
                 nomes_maquinas.add(nome)
         maquinas = ["Todas"] + sorted(nomes_maquinas)
         self.flt_maq.configure(values=maquinas)
@@ -260,11 +257,7 @@ class HistoricoTab:
             if cod_q and cod_q not in str(l.get("erro", "")).lower(): continue
             
             # --- 3. FILTROS DE COMBOBOX E ESTADO ---
-            # Compatibilidade legacy: resolve "id_maquina" (ex: "X1C-2") para o nome completo
-            maquina_log = (
-                l.get("maquina") or
-                _id_para_nome.get(l.get("id_maquina", ""), l.get("id_maquina", ""))
-            )
+            maquina_log = ProducaoService.normalizar_maquina(l, _id_para_nome)
             if maq_q != "Todas" and maquina_log != maq_q: continue
 
             estado_log = l.get("estado", "Em Andamento")
@@ -280,14 +273,8 @@ class HistoricoTab:
                 if d_fim and log_data > d_fim: continue
 
             # --- 5. ADICIONAR À TABELA ---
-            # Compatibilidade legacy: "hora_maquina" era o nome antigo de "tempo_estimado"
-            tempo_mostrar = (
-                l.get("tempo_real") or
-                l.get("tempo_estimado") or
-                l.get("hora_maquina") or
-                l.get("tempo") or
-                "00:00"
-            )
+            # normalizar_tempo converte todos os formatos legacy para HH:MM
+            tempo_mostrar = ProducaoService.normalizar_tempo(l)
             # Compatibilidade legacy: "quantidade" era o nome antigo de "quantidade_consumida"
             qtd_mostrar = (
                 l.get("quantidade_real") or

@@ -38,13 +38,26 @@ class ProducaoService:
 
     @staticmethod
     def converter_para_horas(hhmm: str) -> float:
-        """Converte string 'HH:MM' para float (ex: '01:30' -> 1.5)"""
+        """Converte tempo para float de horas.
+        Suporta todos os formatos legacy:
+          - 'HH:MM'             → formato padrão atual
+          - 'H:MM:SS'           → formato antigo com segundos
+          - 'N days, H:MM:SS'  → timedelta do Python (jobs > 24h)
+        """
         try:
-            partes = hhmm.split(':')
-            if len(partes) >= 2:
-                return int(partes[0]) + (int(partes[1]) / 60)
-            return 0.0
-        except ValueError:
+            s = str(hhmm).strip()
+            dias = 0
+            # "N days, H:MM:SS" — formato timedelta do Python
+            if 'day' in s:
+                partes_dia = s.split(', ', 1)
+                dias = int(partes_dia[0].split()[0])
+                s = partes_dia[1] if len(partes_dia) > 1 else "0:00"
+            partes = s.split(':')
+            h = int(partes[0])
+            m = int(partes[1]) if len(partes) > 1 else 0
+            # segundos ignorados na precisão de minutos
+            return dias * 24 + h + m / 60
+        except (ValueError, TypeError, IndexError):
             return 0.0
 
     @staticmethod
@@ -183,6 +196,53 @@ class ProducaoService:
 
         JSONManager.atualizar(ARQUIVO_LOGS, _transformar)
         return clone or None
+
+    # Mapeamento de IDs legacy para nomes completos de maquinas
+    _LEGACY_MAQUINAS = {
+        "X1-1":    "Bambu Lab X1C #1",
+        "X1-2":    "Bambu Lab X1C #2",
+        "X1-3":    "Bambu Lab X1C #3",
+        "P1-1":    "Bambu Lab P1S #1",
+        "P1-2":    "Bambu Lab P1S #2",
+        "Form3L":  "Formlabs Form 3L",
+        "SLS-380": "3D Systems SLS 380",
+    }
+
+    @staticmethod
+    def normalizar_maquina(producao: dict, id_para_nome: dict = None) -> str:
+        """Resolve o nome completo da maquina de uma producao.
+        Ordem: campo 'maquina' (novo) -> lookup parque -> mapeamento legacy
+        -> id_maquina bruto. IDs numericos (sistema antigo) ficam assinalados."""
+        if id_para_nome is None:
+            id_para_nome = {}
+        nome = producao.get("maquina")
+        if nome:
+            return nome
+        mid = str(producao.get("id_maquina", ""))
+        if mid in id_para_nome:
+            return id_para_nome[mid]
+        if mid in ProducaoService._LEGACY_MAQUINAS:
+            return ProducaoService._LEGACY_MAQUINAS[mid]
+        if mid.isdigit():
+            return f"Desconhecida (ID antigo: {mid})"
+        return mid
+
+    @staticmethod
+    def normalizar_tempo(producao: dict) -> str:
+        """Devolve o tempo da producao normalizado para HH:MM.
+        Tenta: tempo_real > tempo_estimado > hora_maquina > tempo.
+        Converte formatos legacy ('H:MM:SS', 'N days, H:MM:SS') para HH:MM."""
+        raw = (
+            producao.get("tempo_real") or
+            producao.get("tempo_estimado") or
+            producao.get("hora_maquina") or
+            producao.get("tempo") or
+            ""
+        )
+        if not raw:
+            return "00:00"
+        horas = ProducaoService.converter_para_horas(str(raw))
+        return ProducaoService.converter_para_string(horas)
 
     @staticmethod
     def remover_producao(id_producao):
