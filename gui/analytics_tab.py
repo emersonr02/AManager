@@ -91,14 +91,20 @@ class AnalyticsTab:
         limite = datetime.now() - timedelta(days=dias)
         resultado = []
         for l in logs:
-            raw = l.get("data_inicio", "")
+            raw = str(l.get("data_inicio", "")).strip()
+            if not raw:
+                continue
+            dt = None
+            # Tenta o formato completo primeiro; cai para apenas-data se
+            # o registo for legacy e não tiver hora.
             for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
                 try:
-                    if datetime.strptime(raw[:len(fmt)], fmt) >= limite:
-                        resultado.append(l)
+                    dt = datetime.strptime(raw, fmt)
                     break
                 except ValueError:
                     continue
+            if dt and dt >= limite:
+                resultado.append(l)
         return resultado
 
     def atualizar_tabela(self):
