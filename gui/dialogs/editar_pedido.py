@@ -7,12 +7,15 @@ from database.json_manager import JSONManager
 from services.pedido_service import PedidoService
 from services.projeto_service import ProjetoService
 from services.material_service import MaterialService
+from services.audit_service import AuditService
 from gui import theme
 
 class JanelaEditarPedido(ctk.CTkToplevel):
     def __init__(self, parent, pedido, callback_atualizar):
         super().__init__(parent)
         self.pedido = pedido
+        # Cópia do estado original para alimentar a trilha de auditoria
+        self._dados_antes_da_edicao = dict(pedido)
         self.callback_atualizar = callback_atualizar
 
         self.title(f"Editar Pedido #{PedidoService.formatar_codigo(self.pedido.get('id'))}")
@@ -198,6 +201,20 @@ class JanelaEditarPedido(ctk.CTkToplevel):
             "pecas": lista_pecas,
         })
         PedidoService.atualizar_pedido(pedido_atualizado)
+
+        # Trilha de auditoria: regista o que mudou nesta edição — antes,
+        # uma correção posterior ao pedido (ex: mudar data de entrega ou
+        # requerente) não deixava nenhum rasto de quem alterou o quê.
+        AuditService.registrar_diferencas(
+            entidade="pedido",
+            id_entidade=self.pedido.get("id"),
+            dados_antigos=self._dados_antes_da_edicao,
+            dados_novos=pedido_atualizado,
+            campos_relevantes=[
+                "requerente_email", "nr_projeto", "nome_projeto", "tecnologia",
+                "data_entrega", "link_arquivos", "observacoes", "pecas",
+            ],
+        )
 
         messagebox.showinfo("Sucesso", "Pedido atualizado com sucesso!")
         self.callback_atualizar()

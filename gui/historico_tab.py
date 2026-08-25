@@ -127,6 +127,7 @@ class HistoricoTab:
 
         theme.button_ghost(frm_acoes, text="Clonar Ordem", height=35, command=self.clonar_log).pack(side="left", padx=5)
         theme.button_ghost(frm_acoes, text="📄 Gerar PDF", height=35, command=self.gerar_pdf_ordem).pack(side="left", padx=5)
+        theme.button_ghost(frm_acoes, text="📋 Resumo do Dia", height=35, command=self.gerar_resumo_diario).pack(side="left", padx=5)
         theme.button_primary(frm_acoes, text="Exportar Dados (CSV)", height=35, command=self.exportar_csv).pack(side="left", padx=5)
         theme.button_danger(frm_acoes, text="Apagar Registo", height=35, command=self.remover_log).pack(side="right", padx=5)
 
@@ -356,6 +357,24 @@ class HistoricoTab:
         self.lbl_kpi_total.configure(text=str(total_filtradas))
         self.lbl_kpi_taxa.configure(text=f"{taxa:.1f}%")
         self.lbl_kpi_horas.configure(text=ProducaoService.converter_para_string(total_horas))
+
+    def gerar_resumo_diario(self):
+        """Gera o resumo do dia (produções, NCs, máquinas paradas) num PDF
+        de uma página — pensado para consulta rápida no arranque de turno,
+        sem precisar de aplicar filtros manualmente no dashboard."""
+        pasta_saida = filedialog.askdirectory(title="Escolher pasta para guardar o resumo")
+        if not pasta_saida:
+            return
+
+        hoje = datetime.now().strftime("%Y-%m-%d")
+        caminho = os.path.join(pasta_saida, f"Resumo_Diario_{hoje}.pdf")
+
+        try:
+            from services.pdf_service import PDFService
+            PDFService.gerar_resumo_diario(caminho, data_referencia=hoje)
+            messagebox.showinfo("Sucesso", f"Resumo diário gerado:\n{caminho}")
+        except Exception as e:
+            messagebox.showerror("Erro ao gerar resumo", str(e))
 
     def gerar_pdf_ordem(self):
         """Gera o PDF da ordem de produção selecionada e abre a pasta de saída."""

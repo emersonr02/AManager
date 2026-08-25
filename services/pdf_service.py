@@ -174,6 +174,125 @@ class PDFService:
         return caminho_saida
 
     @staticmethod
+    def gerar_resumo_diario(caminho_saida: str, data_referencia: str = None) -> str:
+        """Gera um resumo de uma página com o estado do dia: produções
+        concluídas/canceladas/em curso, NCs registadas, e máquinas paradas.
+        Pensado para arranque de turno — dá uma visão rápida sem precisar
+        de abrir o dashboard e aplicar filtros manualmente.
+
+        data_referencia: 'YYYY-MM-DD'; usa hoje se omitido.
+        """
+        from services.producao_service import ProducaoService
+        from services.maquina_service import MaquinaService
+        from services.nc_service import NCService
+
+        data_ref = data_referencia or datetime.now().strftime("%Y-%m-%d")
+
+        # ── Recolha de dados do dia ────────────────────────────────────
+        id_para_nome = MaquinaService.obter_lookup_id_nome()
+        todas_producoes = ProducaoService.obter_todos()
+        producoes_hoje = [
+            p for p in todas_producoes
+            if str(p.get("data_inicio", "")).startswith(data_ref)
+        ]
+
+        concluidas = [p for p in producoes_hoje if p.get("estado") in ("Concluída", "Entregue")]
+        canceladas = [p for p in producoes_hoje if p.get("estado") == "Cancelada"]
+        em_curso   = [p for p in producoes_hoje if p.get("estado") in ("Em Andamento", "A Imprimir")]
+        com_nc     = [p for p in producoes_hoje if p.get("nc_codigo")]
+
+        total_horas = sum(
+            ProducaoService.converter_para_horas(ProducaoService.normalizar_tempo(p))
+            for p in producoes_hoje
+        )
+
+        maquinas = MaquinaService.obter_todas()
+        maquinas_paradas = [
+            m for m in maquinas
+            if isinstance(m, dict) and m.get("estado") != "Operacional"
+        ]
+
+        # Produções ainda "Em Andamento" de dias anteriores (não fecharam)
+        em_curso_geral = [p for p in todas_producoes if p.get("estado") in ("Em Andamento", "A Imprimir")]
+
+        # ── Construção do PDF ──────────────────────────────────────────
+        pdf = FPDF(orientation="P", unit="mm", format="A4")
+        pdf.set_auto_page_break(auto=True, margin=18)
+        pdf.add_page()
+
+        pdf.set_fill_color(*_AZUL_CEIIA)
+        pdf.rect(0, 0, 210, 28, style="F")
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("Helvetica", "B", 18)
+        pdf.set_xy(15, 8)
+        pdf.cell(0, 10, "RESUMO DIÁRIO DE PRODUÇÃO", ln=1)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_xy(15, 18)
+        pdf.cell(0, 6, f"{data_ref}  |  i3D MES - CEiiA", ln=1)
+
+        pdf.set_text_color(*_CINZA_TEXTO)
+        pdf.ln(18)
+
+        # KPIs do dia
+        PDFService._secao_titulo(pdf, f"Atividade de {data_ref}")
+        PDFService._tabela_campos(pdf, [
+            ("Produções concluídas", str(len(concluidas))),
+            ("Produções canceladas", str(len(canceladas))),
+            ("Produções iniciadas hoje (em curso)", str(len(em_curso))),
+            ("Não-conformidades registadas", str(len(com_nc))),
+            ("Horas de máquina (produções de hoje)", ProducaoService.converter_para_string(total_horas)),
+        ])
+
+        # Produções em curso (de qualquer dia) — o que está a correr agora
+        PDFService._secao_titulo(pdf, f"Em Curso Neste Momento ({len(em_curso_geral)})")
+        if em_curso_geral:
+            for p in em_curso_geral[:15]:  # limite razoável para não estourar a página
+                maquina = ProducaoService.normalizar_maquina(p, id_para_nome)
+                codigo = ProducaoService.formatar_codigo(p.get("id"))
+                pdf.set_font("Helvetica", "", 9)
+                pdf.cell(0, 6, f"{codigo}  -  {maquina}  -  início: {p.get('data_inicio', 'N/A')}", ln=1)
+            if len(em_curso_geral) > 15:
+                pdf.set_font("Helvetica", "I", 8)
+                pdf.cell(0, 6, f"... e mais {len(em_curso_geral) - 15} produção(ões) em curso.", ln=1)
+        else:
+            pdf.set_font("Helvetica", "", 9)
+            pdf.cell(0, 6, "Nenhuma produção em curso.", ln=1)
+
+        # Não-conformidades do dia, com detalhe
+        if com_nc:
+            PDFService._secao_titulo(pdf, "Não-Conformidades de Hoje")
+            for p in com_nc:
+                codigo = ProducaoService.formatar_codigo(p.get("id"))
+                nc_cod = p.get("nc_codigo", "")
+                desc = NCService.obter_descricao(nc_cod)
+                fechado = "CAPA fechado" if p.get("acoes_aplicadas") else "SEM ação confirmada"
+                pdf.set_font("Helvetica", "", 9)
+                pdf.cell(0, 6, f"{codigo}  -  {nc_cod} ({desc})  -  {fechado}", ln=1)
+
+        # Máquinas paradas / em manutenção
+        PDFService._secao_titulo(pdf, f"Máquinas Fora de Operação ({len(maquinas_paradas)})")
+        if maquinas_paradas:
+            for m in maquinas_paradas:
+                pdf.set_font("Helvetica", "", 9)
+                nota = m.get("manutencao", "")
+                sufixo = f" - {nota}" if nota and nota != "OK" else ""
+                pdf.cell(0, 6, f"{m.get('nome', m.get('id', 'N/A'))}  -  {m.get('estado', '')}{sufixo}", ln=1)
+        else:
+            pdf.set_font("Helvetica", "", 9)
+            pdf.cell(0, 6, "Todas as máquinas operacionais.", ln=1)
+
+        # Rodapé
+        pdf.set_y(-15)
+        pdf.set_font("Helvetica", "I", 7)
+        pdf.set_text_color(140, 140, 140)
+        pdf.cell(0, 10,
+            f"Gerado por AManager MES - {datetime.now().strftime('%Y-%m-%d %H:%M')} - CEiiA i3D",
+            align="C")
+
+        pdf.output(caminho_saida)
+        return caminho_saida
+
+    @staticmethod
     def _secao_titulo(pdf: FPDF, texto: str):
         pdf.ln(4)
         pdf.set_fill_color(*_CINZA_CLARO)

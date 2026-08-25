@@ -1,10 +1,12 @@
 import os
 import queue
 import threading
+from datetime import datetime
 import customtkinter as ctk
 from tkinter import ttk
 from config.paths import BASE_DIR, DATA_DIR
 from gui import theme
+from services.backup_service import BackupService
 
 ctk.set_appearance_mode("light")
 
@@ -79,17 +81,25 @@ class AppIndustrialI3D(ctk.CTk):
         )
         self.btn_producao.grid(row=5, column=0, padx=10, pady=(18, 3), sticky="ew")
 
-        # Rodapé — estado da rede
+        # Rodapé — estado da rede + estado do backup automático
         frm_foot = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
         frm_foot.grid(row=8, column=0, padx=16, pady=16, sticky="sw")
-        self.lbl_status_dot = ctk.CTkLabel(frm_foot, text="●",
+
+        frm_rede = ctk.CTkFrame(frm_foot, fg_color="transparent")
+        frm_rede.pack(anchor="w")
+        self.lbl_status_dot = ctk.CTkLabel(frm_rede, text="●",
                                            text_color=theme.SUCCESS[0],
                                            font=theme.font_body(10))
         self.lbl_status_dot.pack(side="left")
-        self.lbl_status_texto = ctk.CTkLabel(frm_foot, text=" Rede CEiiA · a verificar…",
+        self.lbl_status_texto = ctk.CTkLabel(frm_rede, text=" Rede CEiiA · a verificar…",
                                              text_color=theme.SIDEBAR_TEXT_MUTED,
                                              font=theme.font_mono(9))
         self.lbl_status_texto.pack(side="left")
+
+        self.lbl_backup_texto = ctk.CTkLabel(frm_foot, text=" 💾 Backup · a verificar…",
+                                             text_color=theme.SIDEBAR_TEXT_MUTED,
+                                             font=theme.font_mono(9))
+        self.lbl_backup_texto.pack(anchor="w", pady=(2, 0))
 
         # ── ÁREA DE CONTEÚDO — lazy ───────────────────────────────────────
         # Cada tab só é instanciada na primeira visita; depois apenas
@@ -116,6 +126,13 @@ class AppIndustrialI3D(ctk.CTk):
         self._fila_rede: queue.Queue = queue.Queue()
         self._processar_fila_rede()
         self._agendar_verificacao_rede()
+
+        # Backup automático diário — corre uma vez no arranque, em
+        # background, sem bloquear a UI. Idempotente: não duplica backups
+        # se a app for reiniciada várias vezes no mesmo dia.
+        self._fila_backup: queue.Queue = queue.Queue()
+        self._processar_fila_backup()
+        threading.Thread(target=self._executar_backup_inicial_bg, daemon=True).start()
 
     # ── NAVEGAÇÃO ─────────────────────────────────────────────────────────
 
@@ -235,3 +252,34 @@ class AppIndustrialI3D(ctk.CTk):
         else:
             self.lbl_status_dot.configure(text_color=theme.CRITICAL[0])
             self.lbl_status_texto.configure(text=" Rede CEiiA · sem acesso")
+
+    # ── BACKUP AUTOMÁTICO ────────────────────────────────────────────────
+
+    def _executar_backup_inicial_bg(self):
+        """Corre em thread daemon: cria o backup diário se ainda não
+        existir, e faz a rotação dos snapshots antigos. Resultado devolvido
+        via fila para a main thread atualizar a UI em segurança."""
+        try:
+            caminho = BackupService.snapshot_automatico_diario()
+            BackupService.limpar_backups_antigos(manter=30)
+            self._fila_backup.put(("ok", caminho))
+        except Exception as e:
+            self._fila_backup.put(("erro", str(e)))
+
+    def _processar_fila_backup(self):
+        try:
+            while True:
+                estado, info = self._fila_backup.get_nowait()
+                self._atualizar_indicador_backup(estado, info)
+        except queue.Empty:
+            pass
+        self.after(500, self._processar_fila_backup)
+
+    def _atualizar_indicador_backup(self, estado: str, info):
+        if estado == "ok":
+            hoje = datetime.now().strftime("%Y-%m-%d")
+            self.lbl_backup_texto.configure(
+                text=f" 💾 Backup · {hoje}", text_color=theme.SIDEBAR_TEXT_MUTED)
+        else:
+            self.lbl_backup_texto.configure(
+                text=" 💾 Backup · falhou", text_color=theme.CRITICAL[0])

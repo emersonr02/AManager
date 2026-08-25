@@ -6,27 +6,27 @@ from datetime import datetime
 from services.producao_service import ProducaoService
 from services.pedido_service import PedidoService
 from services.nc_service import NCService
+from services.audit_service import AuditService
 from gui import theme
 
 class JanelaFecharOrdem(ctk.CTkToplevel):
     def __init__(self, parent, log_data, callback_salvar):
         super().__init__(parent)
         self.log = log_data
+        # Cópia do estado original — usada no fecho para saber o que mudou
+        # e alimentar a trilha de auditoria (só relevante quando a ordem
+        # já tinha sido fechada antes e está a ser reaberta/corrigida).
+        self._dados_antes_da_edicao = dict(log_data)
         self.callback_salvar = callback_salvar
 
         codigo_ordem = ProducaoService.formatar_codigo(self.log.get('id', ''))
+
         self.title(f"Tratamento e Fecho - Ordem #{codigo_ordem}")
-
-        # Janela mais larga, com o corpo do formulário dentro de uma área
-        # scrollável. O nº de checkboxes de ações corretivas varia consoante
-        # o código NC escolhido — em vez de a janela crescer (e o botão de
-        # gravar sair do ecrã), o cabeçalho e o rodapé (botão + assinatura)
-        # ficam sempre fixos na mesma posição; só o meio faz scroll.
-        self.geometry("640x760")
-        self.minsize(600, 500)
+        # Aumentada a altura da janela para garantir que o botão aparece perfeitamente
+        self.geometry("520x830")
         self.configure(fg_color=theme.BG)
-        self.resizable(False, True)  # permite esticar em altura se o ecrã do utilizador for pequeno
-
+        self.resizable(False, False)
+        
         self.transient(parent)
         self.grab_set()
 
@@ -98,41 +98,10 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
 
     def construir_layout(self):
         codigo_ordem = ProducaoService.formatar_codigo(self.log.get('id', ''))
-
-        # --- RODAPÉ FIXO ---
-        # Empacotado em primeiro lugar com side="bottom" para reservar o
-        # espaço antes de tudo o resto — garante que o botão de gravar
-        # nunca é empurrado para fora do ecrã, independentemente de quantos
-        # checkboxes de ações corretivas aparecerem no meio.
-        frm_rodape = ctk.CTkFrame(self, fg_color=theme.SURFACE, corner_radius=0,
-                                  border_width=1, border_color=theme.BORDER)
-        frm_rodape.pack(side="bottom", fill="x")
-
-        verificador_atual = os.environ.get("USERNAME", "Desconhecido")
-        ctk.CTkLabel(frm_rodape, text=f"Este fecho fica registado como verificado por: {verificador_atual}",
-                     font=theme.font_body(10), text_color=theme.TEXT_MUTED
-                     ).pack(anchor="w", padx=20, pady=(12, 4))
-
-        self.btn_salvar = theme.button_primary(frm_rodape, text="SALVAR APONTAMENTO E FECHAR",
-                                                font=theme.font_body(12, "bold"), height=45,
-                                                command=self.salvar)
-        self.btn_salvar.pack(fill="x", padx=20, pady=(0, 16))
-
-        # --- CABEÇALHO FIXO ---
-        ctk.CTkLabel(self, text=f"Tratamento e Fecho - Ordem #{codigo_ordem}",
-                     font=theme.font_display(16), text_color=theme.ACCENT
-                     ).pack(side="top", pady=(20, 10))
-
-        # --- CORPO SCROLLÁVEL ---
-        # Tudo o que pode crescer (resumo, apontamento, checklist, ações
-        # corretivas dinâmicas) vive aqui dentro. Se não couber no espaço
-        # visível, o utilizador desliza — mas o botão de gravar continua
-        # sempre acessível no rodapé, sem precisar de scroll.
-        corpo = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        corpo.pack(side="top", fill="both", expand=True, padx=0, pady=0)
+        ctk.CTkLabel(self, text=f"Tratamento e Fecho - Ordem #{codigo_ordem}", font=theme.font_display(16), text_color=theme.ACCENT).pack(pady=(20, 10))
 
         # --- RESUMO DO PLANEAMENTO ---
-        frm_resumo = ctk.CTkFrame(corpo, fg_color=theme.SURFACE_ALT, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_M)
+        frm_resumo = ctk.CTkFrame(self, fg_color=theme.SURFACE_ALT, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_M)
         frm_resumo.pack(fill="x", padx=20, pady=10)
 
         ctk.CTkLabel(frm_resumo, text="RESUMO DO PLANEAMENTO", font=theme.font_eyebrow(10), text_color=theme.TEAL).pack(anchor="w", padx=15, pady=(10, 5))
@@ -142,7 +111,7 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         ctk.CTkLabel(frm_resumo, text=info_texto, font=theme.font_mono(11), text_color=theme.TEXT, justify="left").pack(anchor="w", padx=15, pady=(0, 10))
 
         # --- APONTAMENTO REAL ---
-        frm_real = ctk.CTkFrame(corpo, fg_color=theme.SURFACE, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_M)
+        frm_real = ctk.CTkFrame(self, fg_color=theme.SURFACE, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_M)
         frm_real.pack(fill="x", padx=20, pady=10)
 
         ctk.CTkLabel(frm_real, text="Apontamento Real de Produção", font=theme.font_body(12, "bold"), text_color=theme.ACCENT).pack(anchor="w", padx=15, pady=(10, 10))
@@ -150,7 +119,7 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         # Tempo Real
         frm_tr = ctk.CTkFrame(frm_real, fg_color="transparent")
         frm_tr.pack(fill="x", padx=15, pady=5)
-        ctk.CTkLabel(frm_tr, text="Tempo Real (HH:MM):", font=theme.font_body(11), text_color=theme.TEXT_MUTED, width=140, anchor="e").pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(frm_tr, text="Tempo Real (HH:MM):", font=theme.font_body(11), text_color=theme.TEXT_MUTED, width=120, anchor="e").pack(side="left", padx=(0, 10))
         self.ent_tempo_real = theme.entry(frm_tr, width=150, font=theme.font_mono(12))
 
         t_real_gravado = self.log.get("tempo_real", "")
@@ -160,7 +129,7 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         # Quantidade Real
         frm_qr = ctk.CTkFrame(frm_real, fg_color="transparent")
         frm_qr.pack(fill="x", padx=15, pady=(5, 15))
-        ctk.CTkLabel(frm_qr, text="Quantidade Real (g/ml):", font=theme.font_body(11), text_color=theme.TEXT_MUTED, width=140, anchor="e").pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(frm_qr, text="Quantidade Real (g/ml):", font=theme.font_body(11), text_color=theme.TEXT_MUTED, width=120, anchor="e").pack(side="left", padx=(0, 10))
         self.ent_qtd_real = theme.entry(frm_qr, width=150, font=theme.font_mono(12))
 
         q_real_gravado = self.log.get("quantidade_real", "")
@@ -173,8 +142,8 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         self.ent_qtd_real.pack(side="left")
 
         # --- ESTADO FINAL ---
-        ctk.CTkLabel(corpo, text="ESTADO FINAL DA ORDEM", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=20, pady=(15, 5))
-        self.cmb_estado = theme.combobox(corpo, values=["Concluída", "Cancelada", "Em Andamento"], width=580, state="readonly")
+        ctk.CTkLabel(self, text="ESTADO FINAL DA ORDEM", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=20, pady=(15, 5))
+        self.cmb_estado = theme.combobox(self, values=["Concluída", "Cancelada", "Em Andamento"], width=460, state="readonly")
 
         # Agora reflete o estado real da ordem (não assume mais que está concluída)
         estado_atual = self.log.get("estado", "Em Andamento")
@@ -183,7 +152,7 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         self.cmb_estado.pack(padx=20, pady=5)
 
         # --- CRITÉRIOS DE ACEITAÇÃO ---
-        frm_cq = ctk.CTkFrame(corpo, fg_color=theme.SURFACE, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_M)
+        frm_cq = ctk.CTkFrame(self, fg_color=theme.SURFACE, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_M)
         frm_cq.pack(fill="x", padx=20, pady=15)
         ctk.CTkLabel(frm_cq, text="CRITÉRIOS DE ACEITAÇÃO (CONTROLO DE QUALIDADE)", font=theme.font_eyebrow(9), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=15, pady=(10, 5))
 
@@ -210,19 +179,17 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         else: self.chk_conform.deselect()
 
         # --- NÃO-CONFORMIDADE (OPCIONAL) ---
-        frm_nc = ctk.CTkFrame(corpo, fg_color=theme.SURFACE, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_M)
+        frm_nc = ctk.CTkFrame(self, fg_color=theme.SURFACE, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_M)
         frm_nc.pack(fill="x", padx=20, pady=(0, 15))
         ctk.CTkLabel(frm_nc, text="NÃO-CONFORMIDADE (SE APLICÁVEL)", font=theme.font_eyebrow(9), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=15, pady=(10, 5))
 
         valores_nc = ["Nenhuma"] + NCService.obter_nc_por_tecnologia(self.tecnologia)
-        self.cmb_nc = theme.combobox(frm_nc, values=valores_nc, width=580, state="readonly", command=self.on_nc_selecionada)
+        self.cmb_nc = theme.combobox(frm_nc, values=valores_nc, width=460, state="readonly", command=self.on_nc_selecionada)
         self.cmb_nc.pack(padx=15, pady=(0, 5), anchor="w")
 
         # Container onde as ações corretivas sugeridas são renderizadas como
         # checkboxes — permite ao operador confirmar quais foram de facto
         # aplicadas, em vez de apenas listar sugestões que ninguém confirma.
-        # Mesmo que este bloco cresça bastante, o corpo scrollável absorve
-        # o crescimento sem afetar a posição do botão de gravar.
         self.lbl_acoes_titulo = ctk.CTkLabel(frm_nc, text="", font=theme.font_body(10, "bold"),
                                              text_color=theme.TEXT_MUTED, justify="left")
         self.lbl_acoes_titulo.pack(anchor="w", padx=15, pady=(4, 0))
@@ -231,13 +198,23 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         self.frm_acoes_check.pack(fill="x", padx=15, pady=(2, 5))
         self._acao_vars: dict[str, tk.BooleanVar] = {}
 
-        self.ent_notas_acao = theme.entry(frm_nc, width=580, font=theme.font_body(10),
+        self.ent_notas_acao = theme.entry(frm_nc, width=460, font=theme.font_body(10),
                                           placeholder_text="Notas adicionais sobre a correção (opcional)")
 
         nc_gravado = self.log.get("nc_codigo", "")
         valor_inicial = next((v for v in valores_nc if v.startswith(f"{nc_gravado} -")), "Nenhuma") if nc_gravado else "Nenhuma"
         self.cmb_nc.set(valor_inicial)
         self.on_nc_selecionada(valor_inicial)
+
+        # Visível antes de gravar: quem fica registado como tendo validado este
+        # fecho — para não ser um campo capturado silenciosamente em segundo plano.
+        verificador_atual = os.environ.get("USERNAME", "Desconhecido")
+        ctk.CTkLabel(self, text=f"Este fecho fica registado como verificado por: {verificador_atual}",
+                     font=theme.font_body(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=20, pady=(0, 5))
+
+        # Botão com margem extra em baixo (pady)
+        self.btn_salvar = theme.button_primary(self, text="SALVAR APONTAMENTO E FECHAR", font=theme.font_body(12, "bold"), height=45, command=self.salvar)
+        self.btn_salvar.pack(fill="x", padx=20, pady=(10, 20))
 
     def on_nc_selecionada(self, valor):
         """Reconstrói os checkboxes de ações corretivas para o código NC
@@ -339,6 +316,22 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         else:
             self.log["acoes_aplicadas"] = []
             self.log["notas_acao_corretiva"] = ""
+
+        # Trilha de auditoria: se esta ordem já tinha sido fechada antes
+        # (reabertura para correção), regista o que mudou desde o último
+        # fecho. Sem isto, uma correção posterior não deixava rasto de
+        # quem alterou o quê e para que valor.
+        if self._dados_antes_da_edicao.get("verificado_por"):
+            AuditService.registrar_diferencas(
+                entidade="producao",
+                id_entidade=self.log.get("id"),
+                dados_antigos=self._dados_antes_da_edicao,
+                dados_novos=self.log,
+                campos_relevantes=[
+                    "estado", "tempo_real", "quantidade_real",
+                    "nc_codigo", "acoes_aplicadas",
+                ],
+            )
 
         self.callback_salvar(self.log)
         self.destroy()
