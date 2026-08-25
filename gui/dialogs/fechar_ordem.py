@@ -182,8 +182,19 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         self.cmb_nc = theme.combobox(frm_nc, values=valores_nc, width=460, state="readonly", command=self.on_nc_selecionada)
         self.cmb_nc.pack(padx=15, pady=(0, 5), anchor="w")
 
-        self.lbl_acoes_nc = ctk.CTkLabel(frm_nc, text="", font=theme.font_body(10), text_color=theme.TEXT_MUTED, justify="left", wraplength=440)
-        self.lbl_acoes_nc.pack(anchor="w", padx=15, pady=(0, 10))
+        # Container onde as ações corretivas sugeridas são renderizadas como
+        # checkboxes — permite ao operador confirmar quais foram de facto
+        # aplicadas, em vez de apenas listar sugestões que ninguém confirma.
+        self.lbl_acoes_titulo = ctk.CTkLabel(frm_nc, text="", font=theme.font_body(10, "bold"),
+                                             text_color=theme.TEXT_MUTED, justify="left")
+        self.lbl_acoes_titulo.pack(anchor="w", padx=15, pady=(4, 0))
+
+        self.frm_acoes_check = ctk.CTkFrame(frm_nc, fg_color="transparent")
+        self.frm_acoes_check.pack(fill="x", padx=15, pady=(2, 5))
+        self._acao_vars: dict[str, tk.BooleanVar] = {}
+
+        self.ent_notas_acao = theme.entry(frm_nc, width=460, font=theme.font_body(10),
+                                          placeholder_text="Notas adicionais sobre a correção (opcional)")
 
         nc_gravado = self.log.get("nc_codigo", "")
         valor_inicial = next((v for v in valores_nc if v.startswith(f"{nc_gravado} -")), "Nenhuma") if nc_gravado else "Nenhuma"
@@ -201,19 +212,53 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         self.btn_salvar.pack(fill="x", padx=20, pady=(10, 20))
 
     def on_nc_selecionada(self, valor):
-        """Mostra as ações corretivas sugeridas para o código NC escolhido."""
+        """Reconstrói os checkboxes de ações corretivas para o código NC
+        escolhido. Se a ordem já tinha sido fechada antes com este mesmo
+        código, restaura quais ações estavam marcadas como aplicadas."""
+        # Limpa checkboxes anteriores
+        for w in self.frm_acoes_check.winfo_children():
+            w.destroy()
+        self._acao_vars = {}
+
         if not valor or valor == "Nenhuma":
-            self.lbl_acoes_nc.configure(text="")
+            self.lbl_acoes_titulo.configure(text="")
+            self.ent_notas_acao.pack_forget()
             return
 
         cod = valor.split(" - ", 1)[0]
         acoes = NCService.obter_acoes_por_cod(cod)
+
         if not acoes:
-            self.lbl_acoes_nc.configure(text="Sem ações corretivas associadas a este código.")
+            self.lbl_acoes_titulo.configure(text="Sem ações corretivas associadas a este código.")
+            self.ent_notas_acao.pack(padx=15, pady=(0, 10), anchor="w")
             return
 
-        linhas = "\n".join(f"• {a.get('acao')}" for a in acoes)
-        self.lbl_acoes_nc.configure(text=f"Ações corretivas sugeridas:\n{linhas}")
+        self.lbl_acoes_titulo.configure(
+            text="Ações corretivas sugeridas — marca as que foram aplicadas:")
+
+        # Restaura seleção anterior apenas se o código NC não mudou desde
+        # o último fecho (evita "herdar" marcações de um problema diferente)
+        aplicadas_anteriores = (
+            self.log.get("acoes_aplicadas", [])
+            if self.log.get("nc_codigo") == cod else []
+        )
+
+        checkbox_kwargs = dict(fg_color=theme.ACCENT, hover_color=theme.ACCENT_HOVER,
+                               checkmark_color=theme.WHITE, border_color=theme.TEXT_MUTED,
+                               text_color=theme.TEXT)
+        for acao in acoes:
+            act_cod = acao.get("act", "")
+            var = tk.BooleanVar(value=act_cod in aplicadas_anteriores)
+            chk = ctk.CTkCheckBox(self.frm_acoes_check, text=acao.get("acao", act_cod),
+                                  font=theme.font_body(10), variable=var, **checkbox_kwargs)
+            chk.pack(anchor="w", pady=2)
+            self._acao_vars[act_cod] = var
+
+        self.ent_notas_acao.pack(padx=15, pady=(4, 10), anchor="w")
+        notas_gravadas = self.log.get("notas_acao_corretiva", "")
+        if notas_gravadas and self.log.get("nc_codigo") == cod:
+            self.ent_notas_acao.delete(0, "end")
+            self.ent_notas_acao.insert(0, notas_gravadas)
 
     def salvar(self):
         t_real = self.ent_tempo_real.get().strip()
@@ -254,6 +299,18 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
 
         nc_sel = self.cmb_nc.get()
         self.log["nc_codigo"] = nc_sel.split(" - ", 1)[0] if nc_sel and nc_sel != "Nenhuma" else ""
+
+        # Fecha o loop CAPA: grava quais ações corretivas sugeridas foram
+        # de facto aplicadas, e notas livres do operador sobre a correção.
+        # Sem NC selecionada, os campos ficam vazios — não há o que fechar.
+        if self.log["nc_codigo"]:
+            self.log["acoes_aplicadas"] = [
+                act_cod for act_cod, var in self._acao_vars.items() if var.get()
+            ]
+            self.log["notas_acao_corretiva"] = self.ent_notas_acao.get().strip()
+        else:
+            self.log["acoes_aplicadas"] = []
+            self.log["notas_acao_corretiva"] = ""
 
         self.callback_salvar(self.log)
         self.destroy()

@@ -8,6 +8,7 @@ from services.producao_service import ProducaoService
 from config.paths import ARQUIVO_LOGS
 from services.maquina_service import MaquinaService
 from services.template_service import TemplateService
+from services.nc_service import NCService
 from gui import theme
 
 class ProducaoTab:
@@ -35,7 +36,8 @@ class ProducaoTab:
 
         frm = ctk.CTkFrame(self.parent, fg_color=theme.SURFACE, corner_radius=theme.RADIUS_M, border_width=1, border_color=theme.BORDER)
         frm.pack(fill="both", expand=True, padx=24, pady=(0, 18))
-        frm.columnconfigure(1, weight=1)
+        frm.columnconfigure(1, weight=0)
+        frm.columnconfigure(2, weight=1)
 
         # 0. Tecnologia AM
         self._lbl_campo(frm, "Tecnologia AM", 0)
@@ -60,7 +62,7 @@ class ProducaoTab:
         self._lbl_campo(frm, "Vincular Pedido(s)", 2)
 
         frm_pedidos_vinc = ctk.CTkFrame(frm, fg_color="transparent")
-        frm_pedidos_vinc.grid(row=1, column=1, columnspan=2, padx=15, pady=10, sticky="ew")
+        frm_pedidos_vinc.grid(row=2, column=1, columnspan=2, padx=15, pady=10, sticky="ew")
 
         self.ent_pedidos_sel = theme.entry(frm_pedidos_vinc, font=self.f_padrao)
         self.ent_pedidos_sel.insert(0, "Nenhum pedido selecionado")
@@ -71,8 +73,16 @@ class ProducaoTab:
 
         # 2. Máquina Destino
         self._lbl_campo(frm, "Máquina Destino", 3)
-        self.cmb_maq = theme.combobox(frm, values=["A carregar..."], width=250, font=self.f_padrao, state="readonly")
+        self.cmb_maq = theme.combobox(frm, values=["A carregar..."], width=250, font=self.f_padrao,
+                                      state="readonly", command=self.ao_selecionar_maquina)
         self.cmb_maq.grid(row=3, column=1, padx=15, pady=10, sticky="w")
+
+        # Alerta de NC recorrente — some por baixo do seletor de máquina
+        # apenas quando há um problema não resolvido nessa máquina.
+        self.lbl_alerta_recorrencia = ctk.CTkLabel(
+            frm, text="", font=theme.font_body(10, "bold"), text_color=theme.WARNING,
+            justify="left", wraplength=500)
+        self.lbl_alerta_recorrencia.grid(row=3, column=2, padx=(0, 15), pady=10, sticky="w")
 
         # 3. Tempo Máquina
         self._lbl_campo(frm, "Tempo Máquina (HH:MM)", 4)
@@ -153,6 +163,24 @@ class ProducaoTab:
 
         # Botão Guardar
         self.btn_salvar = theme.button_action(frm, text="🚀 INICIAR FABRICO", height=45, font=self.f_titulo, command=self.gravar_producao)
+
+    def ao_selecionar_maquina(self, nome_maquina: str):
+        """Verifica recorrência de NC não resolvida na máquina escolhida e
+        mostra um aviso inline — não bloqueia, apenas chama a atenção antes
+        de lançar mais uma produção sobre um problema conhecido."""
+        if not nome_maquina or nome_maquina.startswith(("Sem ", "Erro", "A carregar")):
+            self.lbl_alerta_recorrencia.configure(text="")
+            return
+
+        id_para_nome = MaquinaService.obter_lookup_id_nome()
+        recorrencias = NCService.detectar_recorrencia(nome_maquina, id_para_nome)
+
+        if recorrencias:
+            msg = NCService.formatar_alerta_recorrencia(recorrencias)
+            self.lbl_alerta_recorrencia.configure(
+                text=f"⚠️ Problema recorrente nesta máquina:\n{msg}")
+        else:
+            self.lbl_alerta_recorrencia.configure(text="")
 
     def preencher_lote_anterior(self):
         if self.chk_var_lote.get():
@@ -301,14 +329,8 @@ class ProducaoTab:
 
     def atualizar_combos(self):
         if not hasattr(self, 'cmb_maq'): return
-        
-        tech_atual = self.cmb_tech.get()
-        caminho_final = ARQUIVO_MAQUINAS
 
-        if not os.path.exists(caminho_final):
-            self.cmb_maq.configure(values=["Ficheiro parque_maquinas.json não encontrado"])
-            self.cmb_maq.set("Sem dados")
-            return
+        tech_atual = self.cmb_tech.get()
 
         try:
             impressoras = MaquinaService.obter_todas()
@@ -330,10 +352,12 @@ class ProducaoTab:
             if maquinas_compativeis:
                 self.cmb_maq.configure(values=maquinas_compativeis)
                 self.cmb_maq.set(maquinas_compativeis[0])
+                self.ao_selecionar_maquina(maquinas_compativeis[0])
             else:
                 self.cmb_maq.configure(values=[f"Sem máquinas p/ {tech_atual}"])
                 self.cmb_maq.set(f"Sem p/ {tech_atual}")
-                
+                self.lbl_alerta_recorrencia.configure(text="")
+
         except Exception as e:
             self.cmb_maq.configure(values=["Erro ao ler ficheiro"])
             self.cmb_maq.set("Erro")
@@ -454,6 +478,20 @@ class ProducaoTab:
         if maq.startswith("Sem máquinas") or maq == "A carregar..." or maq.startswith("Erro"):
             messagebox.showwarning("Aviso", "Selecione uma máquina válida antes de iniciar o fabrico.")
             return
+
+        # Aviso de qualidade: problema recorrente sem correção confirmada
+        # nesta máquina. Não bloqueia — o operador pode decidir prosseguir
+        # (ex: causa já identificada mas correção agendada para depois).
+        id_para_nome = MaquinaService.obter_lookup_id_nome()
+        recorrencias = NCService.detectar_recorrencia(maq, id_para_nome)
+        if recorrencias:
+            msg = NCService.formatar_alerta_recorrencia(recorrencias)
+            if not messagebox.askyesno(
+                "Problema Recorrente Detetado",
+                f"Esta máquina teve não-conformidades repetidas sem correção confirmada:\n\n{msg}\n\n"
+                "Desejas iniciar esta produção mesmo assim?"
+            ):
+                return
 
         # ==========================================
         # 2. SAFETY LOCKS (TRAVAS DE SEGURANÇA)

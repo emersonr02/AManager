@@ -53,13 +53,18 @@ class PDFService:
         codigo = ProducaoService.formatar_codigo(producao.get("id"))
         pdf.cell(0, 6, f"{codigo}  |  i3D MES · CEiiA", ln=1)
 
-        # QR code no canto superior direito
+        # QR code no canto superior direito — usa ficheiro temporário do SO
+        # (com try/finally) para nunca deixar lixo na pasta da app, mesmo
+        # que a geração da imagem falhe a meio.
+        import tempfile
         qr_bytes = PDFService._qr_para_bytes(f"AManager:PRD:{producao.get('id')}")
-        qr_path = os.path.join(BASE_DIR, f"_tmp_qr_{producao.get('id')}.png")
-        with open(qr_path, "wb") as f:
-            f.write(qr_bytes)
-        pdf.image(qr_path, x=172, y=4, w=22, h=22)
-        os.remove(qr_path)
+        fd, qr_path = tempfile.mkstemp(suffix=".png")
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(qr_bytes)
+            pdf.image(qr_path, x=172, y=4, w=22, h=22)
+        finally:
+            os.remove(qr_path)
 
         pdf.set_text_color(*_CINZA_TEXTO)
         pdf.ln(18)
@@ -116,6 +121,33 @@ class PDFService:
                 marca = "[x]" if valor else "[ ]"
                 pdf.set_font("Helvetica", "", 10)
                 pdf.cell(0, 6, f"{marca}  {chave.replace('_', ' ').title()}", ln=1)
+
+        # ── Não-conformidade e ações corretivas (loop CAPA) ───────────────
+        nc_cod = producao.get("nc_codigo", "")
+        if nc_cod:
+            from services.nc_service import NCService
+            PDFService._secao_titulo(pdf, "Não-Conformidade e Ações Corretivas")
+            pdf.set_font("Helvetica", "B", 9)
+            pdf.cell(50, 6, "Código NC:", border=0)
+            pdf.set_font("Helvetica", "", 9)
+            pdf.cell(0, 6, f"{nc_cod} - {NCService.obter_descricao(nc_cod)}", ln=1)
+
+            acoes_aplicadas = producao.get("acoes_aplicadas", [])
+            pdf.set_font("Helvetica", "B", 9)
+            pdf.cell(0, 6, "Ações corretivas aplicadas:", ln=1)
+            pdf.set_font("Helvetica", "", 9)
+            if acoes_aplicadas:
+                for act_cod in acoes_aplicadas:
+                    pdf.cell(0, 5, f"  [x] {NCService.obter_nome_acao(act_cod)}", ln=1)
+            else:
+                pdf.set_text_color(200, 100, 30)
+                pdf.cell(0, 5, "  Nenhuma ação corretiva confirmada como aplicada.", ln=1)
+                pdf.set_text_color(*_CINZA_TEXTO)
+
+            notas = producao.get("notas_acao_corretiva", "")
+            if notas:
+                pdf.set_font("Helvetica", "I", 8)
+                pdf.multi_cell(0, 5, f"Notas: {notas}")
 
         # ── Espaço para assinatura / verificação física ──────────────────
         pdf.ln(6)

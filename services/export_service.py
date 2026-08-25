@@ -18,6 +18,7 @@ CABECALHO_AUDITORIA = [
     "QA GERAL", "INSPEÇÃO VISUAL", "CONTROLO DIMENSIONAL", "CONFORMIDADE",
     "CHECKLIST SEGURANÇA", "CHECKLIST COMPLETO",
     "CÓDIGO NC", "DESCRIÇÃO NC", "AÇÕES CORRETIVAS SUGERIDAS",
+    "AÇÕES CORRETIVAS APLICADAS", "NOTAS DA CORREÇÃO",
     "ALTURA CUBA (SLS)", "% PÓ NOVO (SLS)", "LOTE PÓ (SLS)",
 ]
 
@@ -208,6 +209,8 @@ class ExportService:
         nc_cod   = producao.get("nc_codigo", "")
         nc_desc  = NCService.obter_descricao(nc_cod) if nc_cod else ""
         acoes    = "; ".join(a.get("acao", "") for a in NCService.obter_acoes_por_cod(nc_cod)) if nc_cod else ""
+        acoes_aplicadas = NCService.formatar_acoes_aplicadas(producao.get("acoes_aplicadas", []))
+        notas_correcao  = producao.get("notas_acao_corretiva", "")
 
         # Checklist
         checklist_txt, checklist_ok = ExportService._resumir_checklist(producao.get("checklist_seguranca", {}))
@@ -240,6 +243,8 @@ class ExportService:
             nc_cod,
             nc_desc,
             acoes,
+            acoes_aplicadas,
+            notas_correcao,
             producao.get("altura_cuba", ""),
             producao.get("percentagem_po_novo", ""),
             producao.get("lote_po", ""),
@@ -275,7 +280,7 @@ class ExportService:
         consumo_material = {}   # material → {qtd, n_prod}
         horas_maquina    = {}   # maquina  → {horas, n_prod, n_ok}
         horas_projeto    = {}   # projeto  → {horas, qtd, n_prod, n_ok}
-        nc_pareto        = {}   # nc_cod   → contagem
+        nc_pareto        = {}   # nc_cod   → {"total": n, "com_acao": n}
         qa_counts        = {"inspecao_visual": [0, 0],       # [ok, total]
                             "controlo_dimensional": [0, 0],
                             "conformidade": [0, 0]}
@@ -338,10 +343,14 @@ class ExportService:
                 acc_p["n_prod"] += 1
                 acc_p["n_ok"]   += n_ok
 
-            # NC Pareto
+            # NC Pareto — regista também se o loop CAPA foi fechado
+            # (pelo menos uma ação corretiva confirmada como aplicada)
             nc_cod = prod.get("nc_codigo", "")
             if nc_cod:
-                nc_pareto[nc_cod] = nc_pareto.get(nc_cod, 0) + 1
+                acc_nc = nc_pareto.setdefault(nc_cod, {"total": 0, "com_acao": 0})
+                acc_nc["total"] += 1
+                if prod.get("acoes_aplicadas"):
+                    acc_nc["com_acao"] += 1
 
             # QA
             qa = prod.get("controlo_qualidade", {})
@@ -420,11 +429,13 @@ class ExportService:
                 # ── 6. PARETO DE NÃO-CONFORMIDADES ───────────
                 sep("PARETO DE NÃO-CONFORMIDADES")
                 if nc_pareto:
-                    w.writerow(["CÓDIGO NC", "DESCRIÇÃO", "Nº OCORRÊNCIAS", "% DAS CANCELADAS"])
-                    for nc_cod, cnt in sorted(nc_pareto.items(), key=lambda x: -x[1]):
+                    w.writerow(["CÓDIGO NC", "DESCRIÇÃO", "Nº OCORRÊNCIAS", "% DAS CANCELADAS", "TAXA DE FECHO (CAPA)"])
+                    for nc_cod, dados in sorted(nc_pareto.items(), key=lambda x: -x[1]["total"]):
                         desc = NCService.obter_descricao(nc_cod)
-                        pct  = cnt / n_canceladas * 100 if n_canceladas else 0
-                        w.writerow([nc_cod, desc, cnt, f"{pct:.1f}%"])
+                        cnt = dados["total"]
+                        pct = cnt / n_canceladas * 100 if n_canceladas else 0
+                        taxa_fecho = dados["com_acao"] / cnt * 100 if cnt else 0
+                        w.writerow([nc_cod, desc, cnt, f"{pct:.1f}%", f"{taxa_fecho:.0f}%"])
                 else:
                     w.writerow(["Sem não-conformidades registadas no período exportado."])
 
