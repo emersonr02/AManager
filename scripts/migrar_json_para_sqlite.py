@@ -221,14 +221,19 @@ def migrar_producoes(con, lookup_maquinas: dict, id_pedidos_antigo_para_novo: di
 
         nc_codigo = p.get("nc_codigo") or None  # "" vira NULL (ver nota no schema.sql)
 
+        # Legacy puro: produções antigas sem pedidos_vinculados guardavam
+        # projeto/material diretamente. Preserva-se para não perder histórico.
+        nr_projeto_legacy = p.get("nr_projeto", "") if not p.get("pedidos_vinculados") else ""
+        material_legacy = p.get("material", "") if not p.get("pedidos_vinculados") else ""
+
         cur = con.execute(
             """INSERT INTO producoes (
                 data_inicio, tecnologia, maquina_id, maquina_nome, tempo_estimado,
                 operador, estado, quantidade_consumida, checklist_seguranca,
                 altura_cuba, percentagem_po_novo, lote_po, tempo_real, quantidade_real,
                 verificado_por, data_fecho, controlo_qualidade, nc_codigo,
-                notas_acao_corretiva, erro
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                notas_acao_corretiva, erro, nr_projeto_legacy, material_legacy
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 p.get("data_inicio", ""), p.get("tecnologia", "FDM"), maquina_id, maquina_nome,
                 tempo_estimado, operador, p.get("estado", "Em Andamento"), quantidade_consumida,
@@ -238,6 +243,7 @@ def migrar_producoes(con, lookup_maquinas: dict, id_pedidos_antigo_para_novo: di
                 p.get("verificado_por", ""), p.get("data_fecho", ""),
                 json.dumps(qa, ensure_ascii=False), nc_codigo,
                 p.get("notas_acao_corretiva", ""), p.get("erro", ""),
+                nr_projeto_legacy, material_legacy,
             ),
         )
         nova_producao_id = cur.lastrowid

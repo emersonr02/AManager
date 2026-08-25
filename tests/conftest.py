@@ -1,7 +1,19 @@
 import pytest
 
 from database import json_manager
-from services import pedido_service, maquina_service, nc_service, projeto_service, material_service, producao_service
+from database import sqlite_manager
+from services import pedido_service, nc_service, projeto_service, material_service
+
+
+@pytest.fixture
+def db_sqlite(tmp_path, monkeypatch):
+    """Isola uma base de dados SQLite temporária, com o esquema já criado.
+    Usada por MaquinaService e ProducaoService (já migrados) — os outros
+    services ainda usam ficheiros JSON e as suas próprias fixtures."""
+    caminho_db = tmp_path / "amanager_teste.db"
+    monkeypatch.setattr(sqlite_manager, "ARQUIVO_DB", str(caminho_db))
+    sqlite_manager.SQLiteManager.garantir_esquema()
+    return str(caminho_db)
 
 
 @pytest.fixture
@@ -26,17 +38,19 @@ def arquivo_materiais(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def arquivo_producoes(tmp_path, monkeypatch):
-    caminho = tmp_path / "producao_i3D.json"
-    monkeypatch.setattr(producao_service, "ARQUIVO_LOGS", str(caminho))
-    return str(caminho)
+def arquivo_producoes(db_sqlite):
+    """ProducaoService já foi migrado para SQLite — esta fixture agora só
+    garante isolamento (uma BD nova por teste), não devolve um caminho de
+    ficheiro JSON. Mantém o mesmo nome por compatibilidade com os testes
+    existentes, que a usam apenas como dependência de isolamento (nunca
+    escrevem diretamente no valor devolvido)."""
+    return db_sqlite
 
 
 @pytest.fixture
-def arquivo_maquinas(tmp_path, monkeypatch):
-    caminho = tmp_path / "parque_maquinas.json"
-    monkeypatch.setattr(maquina_service, "ARQUIVO_MAQUINAS", str(caminho))
-    return str(caminho)
+def arquivo_maquinas(db_sqlite):
+    """Idem — MaquinaService também já está em SQLite, partilha a mesma BD."""
+    return db_sqlite
 
 
 @pytest.fixture

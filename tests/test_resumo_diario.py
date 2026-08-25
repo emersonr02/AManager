@@ -14,43 +14,68 @@ from datetime import datetime
 
 @pytest.fixture
 def ambiente_resumo(tmp_path, monkeypatch):
-    from services import producao_service, maquina_service, nc_service
+    from services import nc_service
     from database.json_manager import JSONManager
+    from database import sqlite_manager
 
-    caminho_logs = tmp_path / "producao.json"
-    caminho_maq = tmp_path / "maquinas.json"
     caminho_nc = tmp_path / "nc.json"
     caminho_acoes = tmp_path / "acoes.json"
-
-    monkeypatch.setattr(producao_service, "ARQUIVO_LOGS", str(caminho_logs))
-    monkeypatch.setattr(maquina_service, "ARQUIVO_MAQUINAS", str(caminho_maq))
     monkeypatch.setattr(nc_service, "ARQUIVO_NC_FALHAS", str(caminho_nc))
     monkeypatch.setattr(nc_service, "ARQUIVO_ACOES", str(caminho_acoes))
-
-    JSONManager.salvar([], str(caminho_logs))
-    JSONManager.salvar([], str(caminho_maq))
     JSONManager.salvar([], str(caminho_nc))
     JSONManager.salvar([], str(caminho_acoes))
 
-    return {
-        "logs": str(caminho_logs), "maquinas": str(caminho_maq),
-        "nc": str(caminho_nc), "acoes": str(caminho_acoes),
-    }
+    caminho_db = tmp_path / "amanager_teste.db"
+    monkeypatch.setattr(sqlite_manager, "ARQUIVO_DB", str(caminho_db))
+    sqlite_manager.SQLiteManager.garantir_esquema()
+
+    return {"db": str(caminho_db), "nc": str(caminho_nc), "acoes": str(caminho_acoes)}
 
 
-def _seed_logs(caminho, logs):
-    from database.json_manager import JSONManager
-    JSONManager.salvar(logs, caminho)
+def _seed_logs(ambiente, logs):
+    """Insere produções de teste diretamente em SQLite (ProducaoService já
+    está migrado). Cria também o código NC/ação referenciado, se algum log
+    o usar, só para satisfazer a FK — a descrição real fica no catálogo
+    JSON, semeado à parte via JSONManager.salvar em ambiente['nc']."""
+    from database.sqlite_manager import SQLiteManager
+    with SQLiteManager.conectar() as con:
+        for log in logs:
+            nc_cod = log.get("nc_codigo") or None
+            if nc_cod:
+                con.execute(
+                    "INSERT OR IGNORE INTO nc_falhas (cod, descricao, tecnologia) VALUES (?, '', 'FDM')",
+                    (nc_cod,),
+                )
+            cur = con.execute(
+                "INSERT INTO producoes (data_inicio, tecnologia, maquina_nome, estado, "
+                "tempo_real, tempo_estimado, nc_codigo) VALUES (?, 'FDM', ?, ?, ?, ?, ?)",
+                (log.get("data_inicio", ""), log.get("maquina", ""), log.get("estado", "Em Andamento"),
+                 log.get("tempo_real", ""), log.get("tempo_estimado", ""), nc_cod),
+            )
+            pid = cur.lastrowid
+            for act_cod in log.get("acoes_aplicadas", []):
+                con.execute(
+                    "INSERT OR IGNORE INTO acoes_corretivas (act, acao, tecnologia) VALUES (?, '', 'FDM')",
+                    (act_cod,),
+                )
+                con.execute(
+                    "INSERT OR IGNORE INTO producao_acoes_aplicadas (producao_id, act) VALUES (?, ?)",
+                    (pid, act_cod),
+                )
 
 
-def _seed_maquinas(caminho, maquinas):
-    from database.json_manager import JSONManager
-    JSONManager.salvar(maquinas, caminho)
+def _seed_maquinas(ambiente, maquinas):
+    from services.maquina_service import MaquinaService
+    for m in maquinas:
+        MaquinaService.salvar_maquina(
+            m.get("id", ""), m.get("nome", ""), m.get("tech", "FDM"),
+            m.get("estado", "Operacional"), m.get("manutencao", "OK"), m.get("url_img", ""),
+        )
 
 
 def test_resumo_diario_com_dados_mistos(tmp_path, ambiente_resumo):
     hoje = datetime.now().strftime("%Y-%m-%d")
-    _seed_logs(ambiente_resumo["logs"], [
+    _seed_logs(ambiente_resumo, [
         {"id": 1, "maquina": "Bambu Lab X1C #1", "data_inicio": f"{hoje} 08:00:00",
          "estado": "Concluída", "tempo_real": "02:00"},
         {"id": 2, "maquina": "Bambu Lab X1C #2", "data_inicio": f"{hoje} 09:00:00",
@@ -58,7 +83,7 @@ def test_resumo_diario_com_dados_mistos(tmp_path, ambiente_resumo):
         {"id": 3, "maquina": "Bambu Lab P1S #1", "data_inicio": f"{hoje} 10:00:00",
          "estado": "Em Andamento", "tempo_estimado": "03:00"},
     ])
-    _seed_maquinas(ambiente_resumo["maquinas"], [
+    _seed_maquinas(ambiente_resumo, [
         {"id": "EnderS1-4", "nome": "Ender S1 Pro #4", "estado": "Manutenção - Parado", "manutencao": "Troca de nozzle"},
         {"id": "X1C-1", "nome": "Bambu Lab X1C #1", "estado": "Operacional"},
     ])
@@ -97,7 +122,7 @@ def test_resumo_diario_producoes_de_outros_dias_nao_contam_nos_kpis(tmp_path, am
     referência — produções antigas ainda 'Em Andamento' aparecem na secção
     'Em Curso' mas não nos KPIs de 'produções concluídas hoje' etc."""
     hoje = datetime.now().strftime("%Y-%m-%d")
-    _seed_logs(ambiente_resumo["logs"], [
+    _seed_logs(ambiente_resumo, [
         {"id": 1, "maquina": "X", "data_inicio": "2020-01-01 08:00:00", "estado": "Concluída"},
         {"id": 2, "maquina": "Y", "data_inicio": "2020-01-01 09:00:00", "estado": "Em Andamento", "tempo_estimado": "10:00"},
     ])
@@ -116,7 +141,7 @@ def test_resumo_diario_muitas_producoes_em_curso_trunca_lista(tmp_path, ambiente
         {"id": i, "maquina": f"Máquina {i}", "data_inicio": f"{hoje} 08:00:00", "estado": "Em Andamento"}
         for i in range(25)
     ]
-    _seed_logs(ambiente_resumo["logs"], logs)
+    _seed_logs(ambiente_resumo, logs)
 
     from services.pdf_service import PDFService
     caminho_saida = str(tmp_path / "resumo_muitas.pdf")
@@ -128,7 +153,7 @@ def test_resumo_diario_caracteres_pt_nao_rebentam(tmp_path, ambiente_resumo):
     """Nomes de máquina/projeto com acentuação portuguesa não podem
     provocar UnicodeEncodeError no fpdf (fontes core usam latin-1)."""
     hoje = datetime.now().strftime("%Y-%m-%d")
-    _seed_maquinas(ambiente_resumo["maquinas"], [
+    _seed_maquinas(ambiente_resumo, [
         {"id": "M1", "nome": "Impressora Nº1 - Configuração Especial", "estado": "Manutenção - Parado", "manutencao": "Calibração"},
     ])
     from services.pdf_service import PDFService

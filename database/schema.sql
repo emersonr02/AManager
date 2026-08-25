@@ -117,7 +117,15 @@ CREATE TABLE IF NOT EXISTS producoes (
     -- fica automaticamente isento da verificação de FK pelo SQLite.
     nc_codigo               TEXT REFERENCES nc_falhas(cod) ON DELETE SET NULL,
     notas_acao_corretiva    TEXT NOT NULL DEFAULT '',
-    erro                    TEXT NOT NULL DEFAULT ''
+    erro                    TEXT NOT NULL DEFAULT '',
+
+    -- Produções muito antigas guardavam projeto/material diretamente,
+    -- sem ligação a um pedido (o conceito de "pedido" ainda não existia).
+    -- Preserva-se aqui para não perder histórico na migração; o service
+    -- devolve estes valores nas mesmas chaves que o JSON legacy usava
+    -- ("nr_projeto"/"material") só quando não há pedidos_vinculados.
+    nr_projeto_legacy       TEXT NOT NULL DEFAULT '',
+    material_legacy         TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_producoes_data_inicio ON producoes(data_inicio);

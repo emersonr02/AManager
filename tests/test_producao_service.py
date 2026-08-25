@@ -66,6 +66,21 @@ def test_estimar_quantidade_sls_invalida_devolve_vazio():
     assert ProducaoService.estimar_quantidade({"tecnologia": "SLS", "altura_cuba": "abc", "percentagem_po_novo": "0.3"}) == ""
 
 
+def _seed_pedido_dummy(db_path, pedido_id=1):
+    """Insere um pedido mínimo diretamente via SQL. PedidoService ainda não
+    foi migrado para SQLite — só ProducaoService/MaquinaService o foram —
+    por isso os testes que precisam de um pedido_id real para satisfazer a
+    FK de producao_pedidos semeiam-no diretamente aqui, em vez de passar
+    por PedidoService.criar_pedido() (que continua a escrever em JSON)."""
+    from database.sqlite_manager import SQLiteManager
+    with SQLiteManager.conectar() as con:
+        con.execute(
+            "INSERT OR IGNORE INTO pedidos (id, requerente_email, data_pedido, data_entrega, data_atualizacao) "
+            "VALUES (?, 'teste@ceiia.com', '2026-01-01', '2026-01-10', '2026-01-01')",
+            (pedido_id,),
+        )
+
+
 def _criar(arquivo_producoes, **overrides):
     dados = dict(
         tecnologia="FDM",
@@ -76,6 +91,10 @@ def _criar(arquivo_producoes, **overrides):
         campos_extra={"quantidade_consumida": "150"},
     )
     dados.update(overrides)
+    if dados.get("pedidos_vinculados"):
+        # Garante que os IDs de pedido referenciados existem de facto,
+        # para não violar a FK de producao_pedidos.pedido_id.
+        _seed_pedido_dummy(arquivo_producoes, dados["pedidos_vinculados"][0])
     return ProducaoService.criar_producao(**dados)
 
 
@@ -128,8 +147,12 @@ def test_clonar_producao_gera_novo_id_e_reseta_estado(arquivo_producoes):
 
     assert clone["id"] == 2
     assert clone["estado"] == "Em Andamento"
-    assert "tempo_real" not in clone
-    assert "quantidade_real" not in clone
+    # Nota: no SQLite os campos são sempre colunas presentes (nunca ausentes
+    # do dict); "não herdar dados de fecho" agora significa "vazio", não
+    # "chave inexistente" como acontecia com o dict solto em JSON. O
+    # contrato para quem consome (.get(chave, default)) não muda.
+    assert clone["tempo_real"] == ""
+    assert clone["quantidade_real"] == ""
 
 
 def test_clonar_producao_inexistente_retorna_none(arquivo_producoes):
