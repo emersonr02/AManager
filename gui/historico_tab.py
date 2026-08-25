@@ -359,22 +359,10 @@ class HistoricoTab:
         self.lbl_kpi_horas.configure(text=ProducaoService.converter_para_string(total_horas))
 
     def gerar_resumo_diario(self):
-        """Gera o resumo do dia (produções, NCs, máquinas paradas) num PDF
-        de uma página — pensado para consulta rápida no arranque de turno,
-        sem precisar de aplicar filtros manualmente no dashboard."""
-        pasta_saida = filedialog.askdirectory(title="Escolher pasta para guardar o resumo")
-        if not pasta_saida:
-            return
-
-        hoje = datetime.now().strftime("%Y-%m-%d")
-        caminho = os.path.join(pasta_saida, f"Resumo_Diario_{hoje}.pdf")
-
-        try:
-            from services.pdf_service import PDFService
-            PDFService.gerar_resumo_diario(caminho, data_referencia=hoje)
-            messagebox.showinfo("Sucesso", f"Resumo diário gerado:\n{caminho}")
-        except Exception as e:
-            messagebox.showerror("Erro ao gerar resumo", str(e))
+        """Abre a janela do resumo do dia — a mesma que surge automaticamente
+        no arranque da app, mas disponível a qualquer momento a pedido."""
+        from gui.dialogs.resumo_diario import JanelaResumoDiario
+        JanelaResumoDiario(self.parent.winfo_toplevel(), abertura_automatica=False)
 
     def gerar_pdf_ordem(self):
         """Gera o PDF da ordem de produção selecionada e abre a pasta de saída."""

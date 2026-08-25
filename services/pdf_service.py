@@ -180,40 +180,26 @@ class PDFService:
         Pensado para arranque de turno — dá uma visão rápida sem precisar
         de abrir o dashboard e aplicar filtros manualmente.
 
+        Os dados vêm de ResumoDiarioService.coletar() — a mesma fonte usada
+        pela janela que abre automaticamente no arranque da app, para que
+        PDF e janela nunca mostrem números diferentes.
+
         data_referencia: 'YYYY-MM-DD'; usa hoje se omitido.
         """
         from services.producao_service import ProducaoService
-        from services.maquina_service import MaquinaService
         from services.nc_service import NCService
+        from services.resumo_diario_service import ResumoDiarioService
 
-        data_ref = data_referencia or datetime.now().strftime("%Y-%m-%d")
-
-        # ── Recolha de dados do dia ────────────────────────────────────
-        id_para_nome = MaquinaService.obter_lookup_id_nome()
-        todas_producoes = ProducaoService.obter_todos()
-        producoes_hoje = [
-            p for p in todas_producoes
-            if str(p.get("data_inicio", "")).startswith(data_ref)
-        ]
-
-        concluidas = [p for p in producoes_hoje if p.get("estado") in ("Concluída", "Entregue")]
-        canceladas = [p for p in producoes_hoje if p.get("estado") == "Cancelada"]
-        em_curso   = [p for p in producoes_hoje if p.get("estado") in ("Em Andamento", "A Imprimir")]
-        com_nc     = [p for p in producoes_hoje if p.get("nc_codigo")]
-
-        total_horas = sum(
-            ProducaoService.converter_para_horas(ProducaoService.normalizar_tempo(p))
-            for p in producoes_hoje
-        )
-
-        maquinas = MaquinaService.obter_todas()
-        maquinas_paradas = [
-            m for m in maquinas
-            if isinstance(m, dict) and m.get("estado") != "Operacional"
-        ]
-
-        # Produções ainda "Em Andamento" de dias anteriores (não fecharam)
-        em_curso_geral = [p for p in todas_producoes if p.get("estado") in ("Em Andamento", "A Imprimir")]
+        dados = ResumoDiarioService.coletar(data_referencia)
+        data_ref          = dados["data_referencia"]
+        concluidas        = dados["concluidas"]
+        canceladas        = dados["canceladas"]
+        em_curso          = dados["em_curso_hoje"]
+        com_nc            = dados["com_nc"]
+        total_horas       = dados["total_horas"]
+        em_curso_geral    = dados["em_curso_geral"]
+        maquinas_paradas  = dados["maquinas_paradas"]
+        id_para_nome      = dados["id_para_nome"]
 
         # ── Construção do PDF ──────────────────────────────────────────
         pdf = FPDF(orientation="P", unit="mm", format="A4")

@@ -134,6 +134,12 @@ class AppIndustrialI3D(ctk.CTk):
         self._processar_fila_backup()
         threading.Thread(target=self._executar_backup_inicial_bg, daemon=True).start()
 
+        # Resumo do dia — abre automaticamente na primeira vez que a app
+        # é aberta hoje (nesta máquina). Agendado com after() para só
+        # aparecer depois da janela principal estar totalmente desenhada,
+        # em vez de competir com ela durante o arranque.
+        self.after(400, self._mostrar_resumo_diario_se_necessario)
+
     # ── NAVEGAÇÃO ─────────────────────────────────────────────────────────
 
     def selecionar_tela(self, nome_tela: str):
@@ -283,3 +289,16 @@ class AppIndustrialI3D(ctk.CTk):
         else:
             self.lbl_backup_texto.configure(
                 text=" 💾 Backup · falhou", text_color=theme.CRITICAL[0])
+
+    # ── RESUMO DO DIA ────────────────────────────────────────────────────
+
+    def _mostrar_resumo_diario_se_necessario(self):
+        """Abre a janela do resumo do dia se ainda não foi mostrada hoje
+        nesta máquina. A leitura dos dados é rápida (ficheiros JSON locais
+        ou de rede já em cache do SO), por isso corre diretamente na main
+        thread — não justifica a complexidade de mover para background."""
+        from services.resumo_diario_service import ResumoDiarioService
+        if ResumoDiarioService.ja_visto_hoje():
+            return
+        from gui.dialogs.resumo_diario import JanelaResumoDiario
+        JanelaResumoDiario(self, abertura_automatica=True)
