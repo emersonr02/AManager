@@ -27,6 +27,8 @@ from config.paths import (
     ARQUIVO_AUDIT_LOG,
 )
 from database.sqlite_manager import SQLiteManager
+from services.projeto_service import ProjetoService
+from services.material_service import MaterialService
 
 
 # ── Mapeamento legacy de máquinas — mesmo dicionário que existia em
@@ -47,6 +49,22 @@ def _carregar_json(caminho: str) -> list:
         except json.JSONDecodeError:
             print(f"  ⚠ {caminho} tem JSON inválido — ignorado")
             return []
+
+
+def _filtrar_dicts(dados: list, nome_ficheiro: str) -> list:
+    """Filtra apenas entradas que são dicts, avisando e ignorando qualquer
+    formato inesperado (ex: strings soltas de uma versão antiga) em vez de
+    rebentar a migração inteira. Como toda a migração corre numa única
+    transação, uma única entrada mal-formada não tratada aqui faria
+    perder-se TUDO o resto já importado com sucesso, por rollback."""
+    validos = []
+    for i, item in enumerate(dados):
+        if isinstance(item, dict):
+            validos.append(item)
+        else:
+            print(f"  ⚠ entrada #{i} em {nome_ficheiro} tem formato inesperado "
+                  f"({type(item).__name__}) e foi ignorada: {item!r}")
+    return validos
 
 
 def _converter_horas_legacy(raw: str) -> float:
@@ -89,7 +107,7 @@ def _normalizar_tempo_legacy(prod: dict) -> str:
 # ── Importadores por tabela, na ordem certa (catálogos antes de quem os referencia) ──
 
 def migrar_maquinas(con) -> dict:
-    dados = _carregar_json(ARQUIVO_MAQUINAS)
+    dados = _filtrar_dicts(_carregar_json(ARQUIVO_MAQUINAS), "parque_maquinas.json")
     for m in dados:
         con.execute(
             "INSERT OR REPLACE INTO maquinas (id, nome, tech, estado, manutencao, url_img) "
@@ -103,26 +121,35 @@ def migrar_maquinas(con) -> dict:
 
 def migrar_projetos(con):
     dados = _carregar_json(ARQUIVO_PROJETOS)
-    for p in dados:
+    # projetos.json aceita há muito tempo duas formas: dict completo, ou
+    # apenas uma string "id - nome" (formato antigo). Reutiliza-se o
+    # normalizador do próprio ProjetoService — a mesma lógica que já
+    # resolve isto em runtime — em vez de reimplementar (e arriscar
+    # divergir) essa regra aqui.
+    normalizados = [ProjetoService._normalizar(p) for p in dados]
+    for p in normalizados:
         con.execute(
             "INSERT OR REPLACE INTO projetos (id, nome, ativo) VALUES (?, ?, ?)",
-            (p.get("id"), p.get("nome", ""), 1 if p.get("ativo", True) else 0),
+            (p["id"], p["nome"], 1 if p.get("ativo", True) else 0),
         )
-    print(f"  ✓ {len(dados)} projeto(s)")
+    print(f"  ✓ {len(normalizados)} projeto(s)")
 
 
 def migrar_materiais(con):
     dados = _carregar_json(ARQUIVO_MATERIAIS)
-    for m in dados:
+    # Mesmo caso de materiais.json: aceita string "nome - fabricante" legada
+    # ou dict completo. Reutiliza o normalizador do MaterialService.
+    normalizados = [MaterialService._normalizar(m) for m in dados]
+    for m in normalizados:
         con.execute(
             "INSERT OR IGNORE INTO materiais (nome, fabricante, ativo) VALUES (?, ?, ?)",
-            (m.get("nome", ""), m.get("fabricante", ""), 1 if m.get("ativo", True) else 0),
+            (m["nome"], m["fabricante"], 1 if m.get("ativo", True) else 0),
         )
-    print(f"  ✓ {len(dados)} material(is)")
+    print(f"  ✓ {len(normalizados)} material(is)")
 
 
 def migrar_nc_falhas(con):
-    dados = _carregar_json(ARQUIVO_NC_FALHAS)
+    dados = _filtrar_dicts(_carregar_json(ARQUIVO_NC_FALHAS), "nc_falhas.json")
     for nc in dados:
         con.execute(
             "INSERT OR REPLACE INTO nc_falhas (cod, descricao, categoria, tecnologia, impacto) "
@@ -134,7 +161,7 @@ def migrar_nc_falhas(con):
 
 
 def migrar_acoes_corretivas(con):
-    dados = _carregar_json(ARQUIVO_ACOES)
+    dados = _filtrar_dicts(_carregar_json(ARQUIVO_ACOES), "acoes_corretivas.json")
     for a in dados:
         con.execute(
             "INSERT OR REPLACE INTO acoes_corretivas (act, acao, tecnologia, etapas) VALUES (?, ?, ?, ?)",
@@ -150,7 +177,7 @@ def migrar_acoes_corretivas(con):
 
 
 def migrar_pedidos(con) -> dict:
-    dados = _carregar_json(ARQUIVO_PEDIDOS)
+    dados = _filtrar_dicts(_carregar_json(ARQUIVO_PEDIDOS), "pedidos.json")
     id_antigo_para_novo = {}
     for p in dados:
         cur = con.execute(
@@ -177,7 +204,7 @@ def migrar_pedidos(con) -> dict:
 
 
 def migrar_producoes(con, lookup_maquinas: dict, id_pedidos_antigo_para_novo: dict):
-    dados = _carregar_json(ARQUIVO_LOGS)
+    dados = _filtrar_dicts(_carregar_json(ARQUIVO_LOGS), "producao_i3D.json")
     avisos = []
 
     for p in dados:
@@ -277,7 +304,7 @@ def migrar_producoes(con, lookup_maquinas: dict, id_pedidos_antigo_para_novo: di
 
 
 def migrar_templates(con):
-    dados = _carregar_json(ARQUIVO_TEMPLATES)
+    dados = _filtrar_dicts(_carregar_json(ARQUIVO_TEMPLATES), "templates_producao.json")
     for t in dados:
         con.execute(
             """INSERT INTO templates_producao (
@@ -294,7 +321,7 @@ def migrar_templates(con):
 
 
 def migrar_audit_log(con):
-    dados = _carregar_json(ARQUIVO_AUDIT_LOG)
+    dados = _filtrar_dicts(_carregar_json(ARQUIVO_AUDIT_LOG), "audit_log.json")
     for e in dados:
         def _serializar(v):
             if isinstance(v, (list, dict)):

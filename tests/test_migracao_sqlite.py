@@ -318,3 +318,68 @@ def test_migra_flag_limpar_evita_duplicados(ambiente_migracao):
     with SQLiteManager.conectar() as con:
         total = con.execute("SELECT COUNT(*) c FROM maquinas").fetchone()["c"]
         assert total == 1  # confirma que a tabela não acumulou duplicados manualmente
+
+
+def test_migra_projeto_formato_string_legacy(ambiente_migracao):
+    """projetos.json em produção real usa strings soltas 'id - nome' em vez
+    de dicts — este era o bug que rebentava a migração inteira (por
+    rollback de transação) mal chegasse a esta função."""
+    _escrever(ambiente_migracao["ARQUIVO_PROJETOS"], ["236863 - PPS BEN", "247042 - PPS CASTA"])
+
+    import migrar_json_para_sqlite as migrador
+    from database.sqlite_manager import SQLiteManager
+    migrador.migrar()
+
+    with SQLiteManager.conectar() as con:
+        projetos = con.execute("SELECT * FROM projetos ORDER BY id").fetchall()
+        assert len(projetos) == 2
+        assert dict(projetos[0])["id"] == "236863"
+        assert dict(projetos[0])["nome"] == "PPS BEN"
+
+
+def test_migra_projeto_string_sem_separador(ambiente_migracao):
+    """Uma string sem ' - ' vira id=texto, nome=vazio — não rebenta."""
+    _escrever(ambiente_migracao["ARQUIVO_PROJETOS"], ["SemSeparador"])
+
+    import migrar_json_para_sqlite as migrador
+    from database.sqlite_manager import SQLiteManager
+    migrador.migrar()
+
+    with SQLiteManager.conectar() as con:
+        row = con.execute("SELECT * FROM projetos").fetchone()
+        assert row["id"] == "SemSeparador"
+        assert row["nome"] == ""
+
+
+def test_migra_material_formato_string_legacy(ambiente_migracao):
+    """materiais.json também aceita strings soltas 'nome - fabricante'."""
+    _escrever(ambiente_migracao["ARQUIVO_MATERIAIS"], ["PLA - Generic", "ASA - Generic"])
+
+    import migrar_json_para_sqlite as migrador
+    from database.sqlite_manager import SQLiteManager
+    migrador.migrar()
+
+    with SQLiteManager.conectar() as con:
+        materiais = con.execute("SELECT * FROM materiais ORDER BY nome").fetchall()
+        assert len(materiais) == 2
+        assert dict(materiais[0])["nome"] == "ASA"
+        assert dict(materiais[0])["fabricante"] == "Generic"
+
+
+def test_migra_entrada_malformada_e_ignorada_sem_rebentar_tudo(ambiente_migracao):
+    """Uma entrada de formato inesperado nalgum ficheiro (ex: string solta
+    onde se esperava um dict) não pode destruir a migração inteira por
+    rollback — deve ser ignorada com aviso, preservando tudo o resto."""
+    _escrever(ambiente_migracao["ARQUIVO_MAQUINAS"], [
+        {"id": "X1-1", "nome": "Bambu Lab X1C #1", "tech": "FDM"},
+        "entrada inesperada",
+        {"id": "X1-2", "nome": "Bambu Lab X1C #2", "tech": "FDM"},
+    ])
+
+    import migrar_json_para_sqlite as migrador
+    from database.sqlite_manager import SQLiteManager
+    migrador.migrar()  # não deve lançar exceção
+
+    with SQLiteManager.conectar() as con:
+        maquinas = con.execute("SELECT * FROM maquinas").fetchall()
+        assert len(maquinas) == 2  # as 2 válidas persistiram, a inválida foi ignorada
