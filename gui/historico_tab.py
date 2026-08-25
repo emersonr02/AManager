@@ -108,6 +108,14 @@ class HistoricoTab:
 
         self.tab_tree.bind("<Double-1>", self.abrir_tratamento_ordem)
 
+        # Ordenação por coluna — clique no cabeçalho inverte a ordem
+        self._sort_col   = "data"   # coluna actualmente ordenada
+        self._sort_asc   = False    # False = mais recente primeiro (padrão)
+        _COL_IDX = {"id":0,"data":1,"projeto":2,"maquina":3,"material":4,
+                    "qnt":5,"tempo":6,"estado":7,"operador":8,"verificado":9}
+        for col in ("id","data","projeto","maquina","material","qnt","tempo","estado","operador","verificado"):
+            self.tab_tree.heading(col, command=lambda c=col: self._ordenar_por(c))
+
         sb = ttk.Scrollbar(frm_conteudo, orient="vertical", command=self.tab_tree.yview)
         self.tab_tree.configure(yscrollcommand=sb.set)
         sb.pack(fill="y", side="right", pady=10, padx=(0, 5))
@@ -118,6 +126,7 @@ class HistoricoTab:
         frm_acoes.pack(fill="x", padx=24, pady=(5, 18))
 
         theme.button_ghost(frm_acoes, text="Clonar Ordem", height=35, command=self.clonar_log).pack(side="left", padx=5)
+        theme.button_ghost(frm_acoes, text="📄 Gerar PDF", height=35, command=self.gerar_pdf_ordem).pack(side="left", padx=5)
         theme.button_primary(frm_acoes, text="Exportar Dados (CSV)", height=35, command=self.exportar_csv).pack(side="left", padx=5)
         theme.button_danger(frm_acoes, text="Apagar Registo", height=35, command=self.remover_log).pack(side="right", padx=5)
 
@@ -168,6 +177,22 @@ class HistoricoTab:
             return datetime.strptime(data_str, "%Y-%m-%d").date()
         except ValueError:
             return None
+
+    def _ordenar_por(self, coluna: str):
+        """Inverte a ordenação se a mesma coluna; caso contrário ordena pela nova."""
+        if self._sort_col == coluna:
+            self._sort_asc = not self._sort_asc
+        else:
+            self._sort_col = coluna
+            self._sort_asc = True
+        # Atualiza símbolo ↑↓ no cabeçalho
+        _LABELS = {"id":"ID","data":"DATA","projeto":"PROJETO","maquina":"MAQUINA",
+                   "material":"MATERIAL","qnt":"QNT","tempo":"TEMPO","estado":"ESTADO",
+                   "operador":"INICIADO POR","verificado":"VERIFICADO POR"}
+        for c, lbl in _LABELS.items():
+            seta = (" ↑" if self._sort_asc else " ↓") if c == coluna else ""
+            self.tab_tree.heading(c, text=lbl + seta)
+        self.atualizar_tabela()
 
     # ------------------------------------------------------------------ #
     #  HELPERS PRIVADOS                                                    #
@@ -261,6 +286,23 @@ class HistoricoTab:
         total_filtradas = sucesso_pecas = pecas_finalizadas = 0
         total_horas = 0.0
 
+        # Ordena os logs antes de iterar, para que a inserção na tabela
+        # já respeite a ordem pretendida pelo utilizador.
+        _COL_KEY = {
+            "id":       lambda l: int(l.get("id", 0)),
+            "data":     lambda l: str(l.get("data_inicio", "")),
+            "projeto":  lambda l: str(l.get("nr_projeto", "")),
+            "maquina":  lambda l: ProducaoService.normalizar_maquina(l, _id_para_nome),
+            "material": lambda l: str(l.get("material", "")),
+            "qnt":      lambda l: float(str(l.get("quantidade_real") or l.get("quantidade_consumida") or l.get("quantidade") or 0).replace(",",".")),
+            "tempo":    lambda l: ProducaoService.converter_para_horas(ProducaoService.normalizar_tempo(l)),
+            "estado":   lambda l: str(l.get("estado", "")),
+            "operador": lambda l: str(l.get("operador") or l.get("responsavel") or ""),
+            "verificado":lambda l: str(l.get("verificado_por", "")),
+        }
+        key_fn = _COL_KEY.get(self._sort_col, _COL_KEY["data"])
+        logs = sorted(logs, key=lambda l: key_fn(l), reverse=not self._sort_asc)
+
         for l in logs:
             projeto_final, material_final = self._resolver_projeto_material(l, pedidos_db)
 
@@ -314,6 +356,41 @@ class HistoricoTab:
         self.lbl_kpi_total.configure(text=str(total_filtradas))
         self.lbl_kpi_taxa.configure(text=f"{taxa:.1f}%")
         self.lbl_kpi_horas.configure(text=ProducaoService.converter_para_string(total_horas))
+
+    def gerar_pdf_ordem(self):
+        """Gera o PDF da ordem de produção selecionada e abre a pasta de saída."""
+        sel = self.tab_tree.selection()
+        if not sel:
+            messagebox.showwarning("Aviso", "Seleciona uma produção na tabela primeiro.")
+            return
+        id_reg = ProducaoService.extrair_id(self.tab_tree.item(sel[0])['values'][0])
+
+        producao = None
+        for p in ProducaoService.obter_todos():
+            if p.get("id") == id_reg:
+                producao = p
+                break
+        if not producao:
+            messagebox.showerror("Erro", "Produção não encontrada.")
+            return
+
+        vinculos = producao.get("pedidos_vinculados", [])
+        pedidos_vinculados = [p for p in PedidoService.obter_todos() if p.get("id") in vinculos]
+        id_para_nome = MaquinaService.obter_lookup_id_nome()
+
+        pasta_saida = filedialog.askdirectory(title="Escolher pasta para guardar o PDF")
+        if not pasta_saida:
+            return
+
+        codigo = ProducaoService.formatar_codigo(producao.get("id"))
+        caminho = os.path.join(pasta_saida, f"Ordem_{codigo}.pdf")
+
+        try:
+            from services.pdf_service import PDFService
+            PDFService.gerar_ordem_producao(producao, pedidos_vinculados, id_para_nome, caminho)
+            messagebox.showinfo("Sucesso", f"PDF gerado:\n{caminho}")
+        except Exception as e:
+            messagebox.showerror("Erro ao gerar PDF", str(e))
 
     def exportar_csv(self):
         caminho_salvar = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV", "*.csv")])

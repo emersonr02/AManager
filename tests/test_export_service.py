@@ -50,7 +50,10 @@ def test_exportar_historico_csv_gera_linha_de_auditoria_completa(tmp_path, monke
     with open(caminho_csv, newline='', encoding='utf-8-sig') as f:
         linhas = list(csv.reader(f, delimiter=';'))
 
-    cabecalho, linha = linhas[0], linhas[1]
+    # O CSV começa com metadados; encontra o cabeçalho pelo primeiro campo
+    idx_cab = next(i for i, row in enumerate(linhas) if row and row[0] == "Nº PRODUÇÃO")
+    cabecalho = linhas[idx_cab]
+    linha = linhas[idx_cab + 1]
     dados = dict(zip(cabecalho, linha))
 
     assert dados["Nº PRODUÇÃO"] == "PRD000001"

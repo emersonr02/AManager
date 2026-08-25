@@ -8,6 +8,7 @@ import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox
 from services.maquina_service import MaquinaService
+from services.producao_service import ProducaoService
 from gui.dialogs.logistica_maquina import JanelaLogisticaMaquina
 from gui import theme
 
@@ -49,26 +50,65 @@ class ParqueTab:
             self.scroll_container.grid_columnconfigure(i, weight=1, minsize=240)
 
         maquinas = MaquinaService.obter_todas()
+        id_para_nome = MaquinaService.obter_lookup_id_nome()
+        fila_por_maquina = self._construir_fila(id_para_nome)
+
         row = col = 0
         for m in maquinas:
-            self._criar_card(m, row, col)
+            producao_ativa = fila_por_maquina.get(m.get("id"))
+            self._criar_card(m, row, col, producao_ativa)
             col += 1
             if col > 3:
                 col = 0
                 row += 1
 
-    def _criar_card(self, m: dict, row: int, col: int):
+    def _construir_fila(self, id_para_nome: dict) -> dict:
+        """Devolve {id_maquina: producao_dict} para máquinas com job ativo
+        (estado 'Em Andamento' ou 'A Imprimir'). Mostra a mais recente em
+        caso de dados legacy com mais do que um job 'aberto' na mesma máquina."""
+        ativos = {}
+        for p in ProducaoService.obter_todos():
+            if p.get("estado") not in ("Em Andamento", "A Imprimir"):
+                continue
+            nome_maquina = ProducaoService.normalizar_maquina(p, id_para_nome)
+            mid = p.get("id_maquina") or self._id_por_nome(nome_maquina, id_para_nome)
+            if not mid:
+                continue
+            anterior = ativos.get(mid)
+            if anterior is None or p.get("data_inicio", "") > anterior.get("data_inicio", ""):
+                ativos[mid] = p
+        return ativos
+
+    @staticmethod
+    def _id_por_nome(nome: str, id_para_nome: dict) -> str:
+        for mid, n in id_para_nome.items():
+            if n == nome:
+                return mid
+        return ""
+
+    # ------------------------------------------------------------------ #
+    #  CARD DA MÁQUINA                                                     #
+    # ------------------------------------------------------------------ #
+
+    def _criar_card(self, m: dict, row: int, col: int, producao_ativa: dict = None):
         estado = m.get("estado", "Operacional")
         notas  = m.get("manutencao", "OK")
         url    = m.get("url_img", "")
 
-        variante = ("ok" if estado == "Operacional"
-                    else "warn" if "Manutenção" in estado
-                    else "neutral")
+        # O pill reflete o job ativo quando existe — é mais útil saber
+        # "está a imprimir" do que apenas "operacional" quando há fila.
+        if producao_ativa:
+            variante_pill = "run"
+            texto_pill = "EM PRODUÇÃO"
+        else:
+            variante_pill = ("ok" if estado == "Operacional"
+                             else "warn" if "Manutenção" in estado
+                             else "neutral")
+            texto_pill = estado.upper()
 
         card = ctk.CTkFrame(self.scroll_container, fg_color=theme.SURFACE,
                             corner_radius=theme.RADIUS_M, border_width=1,
-                            border_color=theme.BORDER)
+                            border_color=(theme.TEAL if producao_ativa else theme.BORDER))
         card.grid(row=row, column=col, padx=10, pady=10, sticky="ew")
 
         # Placeholder enquanto a imagem carrega
@@ -77,22 +117,24 @@ class ParqueTab:
         lbl_img.pack(pady=(15, 5))
 
         if url and urlparse(url).scheme in ("http", "https"):
-            # Download assíncrono — nunca bloqueia a main thread
             threading.Thread(
                 target=self._download_imagem_bg,
                 args=(url, lbl_img),
                 daemon=True,
             ).start()
         else:
-            lbl_img.configure(text="")  # sem imagem, sem ruído
+            lbl_img.configure(text="")
 
-        theme.pill(card, estado.upper(), variante).pack(anchor="e", padx=15, pady=(15, 0))
+        theme.pill(card, texto_pill, variante_pill).pack(anchor="e", padx=15, pady=(15, 0))
         ctk.CTkLabel(card, text=m.get("id"), font=theme.font_mono(17, "bold"),
                      text_color=theme.ACCENT).pack(anchor="w", padx=15, pady=(8, 0))
         ctk.CTkLabel(card, text=m.get("nome"), font=self.f_padrao,
                      text_color=theme.TEXT).pack(anchor="w", padx=15, pady=(0, 5))
         ctk.CTkLabel(card, text=f"Tecnologia: {m.get('tech')}",
                      font=theme.font_body(11), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=15)
+
+        if producao_ativa:
+            self._desenhar_bloco_job_ativo(card, producao_ativa)
 
         texto_notas = f"🔧 {notas}" if notas != "OK" else "✓ Sistemas OK"
         cor_notas   = theme.WARNING if notas != "OK" else theme.TEXT_MUTED
@@ -103,6 +145,62 @@ class ParqueTab:
                            height=28,
                            command=lambda idx=m: self.abrir_formulario_edicao(idx)
                            ).pack(fill="x", padx=15, pady=(0, 15))
+
+    def _desenhar_bloco_job_ativo(self, card, producao: dict):
+        """Mostra o job em curso: projeto, tempo estimado e barra de
+        progresso (calculada a partir de data_inicio vs tempo_estimado)."""
+        frm = ctk.CTkFrame(card, fg_color=theme.SURFACE_ALT,
+                           corner_radius=theme.RADIUS_S)
+        frm.pack(fill="x", padx=15, pady=(8, 0))
+
+        projeto = producao.get("nr_projeto", "") or "Sem projeto"
+        vinculos = producao.get("pedidos_vinculados", [])
+        if vinculos:
+            from services.pedido_service import PedidoService
+            pedidos = PedidoService.obter_todos()
+            nomes = {p.get("nr_projeto", "") for p in pedidos if p.get("id") in vinculos}
+            if nomes:
+                projeto = " | ".join(sorted(n for n in nomes if n))
+
+        ctk.CTkLabel(frm, text=f"🖨️ {projeto}", font=theme.font_body(11, "bold"),
+                     text_color=theme.TEAL, wraplength=200, justify="left"
+                     ).pack(anchor="w", padx=10, pady=(8, 2))
+
+        tempo_est = ProducaoService.normalizar_tempo(producao)
+        horas_est = ProducaoService.converter_para_horas(tempo_est)
+        progresso, decorrido_str = self._calcular_progresso(
+            producao.get("data_inicio", ""), horas_est)
+
+        barra = ctk.CTkProgressBar(frm, height=6, progress_color=theme.TEAL,
+                                   fg_color=theme.BORDER)
+        barra.set(progresso)
+        barra.pack(fill="x", padx=10, pady=(2, 4))
+
+        ctk.CTkLabel(frm, text=f"{decorrido_str} / {tempo_est}h estimado",
+                     font=theme.font_mono(9), text_color=theme.TEXT_MUTED
+                     ).pack(anchor="w", padx=10, pady=(0, 8))
+
+    @staticmethod
+    def _calcular_progresso(data_inicio_str: str, horas_estimadas: float) -> tuple:
+        """Calcula a fração decorrida do job (0.0-1.0) e uma string HH:MM
+        do tempo já passado desde o início."""
+        from datetime import datetime
+        if not data_inicio_str or horas_estimadas <= 0:
+            return 0.0, "00:00"
+        inicio = None
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+            try:
+                inicio = datetime.strptime(data_inicio_str.strip(), fmt)
+                break
+            except ValueError:
+                continue
+        if inicio is None:
+            return 0.0, "00:00"
+        decorrido_h = max(0, (datetime.now() - inicio).total_seconds() / 3600)
+        h = int(decorrido_h)
+        mnt = int(round((decorrido_h - h) * 60))
+        progresso = min(1.0, decorrido_h / horas_estimadas) if horas_estimadas else 0.0
+        return progresso, f"{h:02d}:{mnt:02d}"
 
     # ------------------------------------------------------------------ #
     #  IMAGENS EM BACKGROUND                                               #
@@ -117,7 +215,6 @@ class ParqueTab:
             ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(120, 120))
             self._fila_imagens.put((lbl_widget, ctk_img))
         except Exception:
-            # Falha silenciosa — o placeholder já está no lugar
             self._fila_imagens.put((lbl_widget, None))
 
     def _processar_fila_imagens(self):

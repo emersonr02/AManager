@@ -35,7 +35,7 @@ class AppIndustrialI3D(ctk.CTk):
         self.sidebar_frame = ctk.CTkFrame(self, width=220, corner_radius=0,
                                           fg_color=theme.ACCENT_STRONG)
         self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
-        self.sidebar_frame.grid_rowconfigure(6, weight=1)
+        self.sidebar_frame.grid_rowconfigure(7, weight=1)
 
         frm_brand = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
         frm_brand.grid(row=0, column=0, padx=20, pady=(28, 34), sticky="w")
@@ -64,6 +64,11 @@ class AppIndustrialI3D(ctk.CTk):
                                         **_btn_cfg)
         self.btn_parque.grid(row=3, column=0, padx=10, pady=3, sticky="ew")
 
+        self.btn_analytics = ctk.CTkButton(self.sidebar_frame, text="📈  Análise",
+                                           command=lambda: self.selecionar_tela("analytics"),
+                                           **_btn_cfg)
+        self.btn_analytics.grid(row=4, column=0, padx=10, pady=3, sticky="ew")
+
         self.btn_producao = ctk.CTkButton(
             self.sidebar_frame, text="➕  Nova Produção",
             command=lambda: self.selecionar_tela("producao"),
@@ -72,11 +77,11 @@ class AppIndustrialI3D(ctk.CTk):
             font=theme.font_body(13, "bold"), height=38,
             corner_radius=theme.RADIUS_S,
         )
-        self.btn_producao.grid(row=4, column=0, padx=10, pady=(18, 3), sticky="ew")
+        self.btn_producao.grid(row=5, column=0, padx=10, pady=(18, 3), sticky="ew")
 
         # Rodapé — estado da rede
         frm_foot = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
-        frm_foot.grid(row=7, column=0, padx=16, pady=16, sticky="sw")
+        frm_foot.grid(row=8, column=0, padx=16, pady=16, sticky="sw")
         self.lbl_status_dot = ctk.CTkLabel(frm_foot, text="●",
                                            text_color=theme.SUCCESS[0],
                                            font=theme.font_body(10))
@@ -94,10 +99,11 @@ class AppIndustrialI3D(ctk.CTk):
 
         # Mapa nome → (classe, args_extra)
         self._tab_registry = {
-            "dash":     ("HistoricoTab", (self,)),
-            "pedidos":  ("PedidosTab",   ()),
-            "producao": ("ProducaoTab",  (self,)),
-            "parque":   ("ParqueTab",    ()),
+            "dash":      ("HistoricoTab", (self,)),
+            "pedidos":   ("PedidosTab",   ()),
+            "producao":  ("ProducaoTab",  (self,)),
+            "parque":    ("ParqueTab",    ()),
+            "analytics": ("AnalyticsTab", (self,)),
         }
 
         # Botão atualmente ativo — para reset com um único .configure()
@@ -136,7 +142,8 @@ class AppIndustrialI3D(ctk.CTk):
 
         # 5. Destaca botão ativo
         btn_map = {"dash": self.btn_dash, "pedidos": self.btn_pedidos,
-                   "parque": self.btn_parque, "producao": self.btn_producao}
+                   "parque": self.btn_parque, "producao": self.btn_producao,
+                   "analytics": self.btn_analytics}
         btn = btn_map.get(nome_tela)
         if btn:
             btn.configure(fg_color=theme.TEAL_HOVER if nome_tela == "producao"
@@ -149,8 +156,10 @@ class AppIndustrialI3D(ctk.CTk):
         from gui.pedidos_tab import PedidosTab
         from gui.producao_tab import ProducaoTab
         from gui.parque_tab import ParqueTab
+        from gui.analytics_tab import AnalyticsTab
         classes = {"HistoricoTab": HistoricoTab, "PedidosTab": PedidosTab,
-                   "ProducaoTab": ProducaoTab, "ParqueTab": ParqueTab}
+                   "ProducaoTab": ProducaoTab, "ParqueTab": ParqueTab,
+                   "AnalyticsTab": AnalyticsTab}
 
         cls_name, extra_args = self._tab_registry[nome]
         cls = classes[cls_name]
@@ -172,6 +181,8 @@ class AppIndustrialI3D(ctk.CTk):
             ui.atualizar_tabela()
         elif nome == "parque" and hasattr(ui, "atualizar_grid_maquinas"):
             ui.atualizar_grid_maquinas()
+        elif nome == "analytics" and hasattr(ui, "atualizar_tabela"):
+            ui.atualizar_tabela()
         # "producao" não tem dados para refrescar (é um formulário)
 
     # ── FONTES RESPONSIVAS ────────────────────────────────────────────────
