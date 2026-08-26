@@ -2,10 +2,8 @@ import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox
 import os
-from database.json_manager import JSONManager
 from services.pedido_service import PedidoService
 from services.producao_service import ProducaoService
-from config.paths import ARQUIVO_LOGS
 from services.maquina_service import MaquinaService
 from services.template_service import TemplateService
 from services.nc_service import NCService

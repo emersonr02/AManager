@@ -2,8 +2,6 @@ import csv
 import os
 from datetime import datetime
 
-from config.paths import ARQUIVO_MAQUINAS
-from database.json_manager import JSONManager
 
 # ─────────────────────────────────────────────
 # CABEÇALHO PRINCIPAL
@@ -32,9 +30,8 @@ class ExportService:
     @staticmethod
     def _id_para_nome_maquina() -> dict:
         """Resolve id_maquina legacy (ex: 'X1C-2') → nome completo (ex: 'Bambu Lab X1C #2')."""
-        maquinas_db = JSONManager.carregar(ARQUIVO_MAQUINAS) if os.path.exists(ARQUIVO_MAQUINAS) else []
-        return {m.get("id"): m.get("nome") for m in maquinas_db
-                if isinstance(m, dict) and m.get("id") and m.get("nome")}
+        from services.maquina_service import MaquinaService
+        return MaquinaService.obter_lookup_id_nome()
 
     @staticmethod
     def _pedidos_vinculados(producao: dict, pedidos_por_id: dict) -> list:

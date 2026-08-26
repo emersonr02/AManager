@@ -1,7 +1,17 @@
+"""
+PedidoService — sobre SQLite.
+
+Mudança importante face à versão JSON: 'producoes_vinculadas' deixa de ser
+um campo guardado (que era preciso manter manualmente em sincronia) e passa
+a ser DERIVADO da tabela producao_pedidos — a mesma que ProducaoService já
+usa para o sentido oposto. Deixa de haver duas fontes de verdade para a
+mesma relação, eliminando a possibilidade de divergirem entre si.
+"""
 import re
 from datetime import datetime
-from database.json_manager import JSONManager
-from config.paths import ARQUIVO_PEDIDOS
+
+from database.sqlite_manager import SQLiteManager
+
 
 class PedidoService:
 
@@ -22,67 +32,116 @@ class PedidoService:
         digitos = re.sub(r"\D", "", str(codigo))
         return int(digitos) if digitos else None
 
+    # ── Acesso a dados ──────────────────────────────────────────────────────
+
+    @staticmethod
+    def _montar_dict(con, row) -> dict:
+        """Reconstrói o dict do pedido no mesmo formato que a UI já espera:
+        com a lista de peças embutida e o link inverso para as produções."""
+        d = dict(row)
+        pid = d["id"]
+
+        pecas = con.execute(
+            "SELECT pn, material, qtd_solicitada, qtd_produzida FROM pedido_pecas "
+            "WHERE pedido_id = ? ORDER BY ordem",
+            (pid,),
+        ).fetchall()
+        d["pecas"] = [dict(p) for p in pecas]
+
+        # Derivado da tabela N:N, em vez de guardado num campo próprio
+        vinculadas = con.execute(
+            "SELECT producao_id FROM producao_pedidos WHERE pedido_id = ? ORDER BY producao_id",
+            (pid,),
+        ).fetchall()
+        d["producoes_vinculadas"] = [v["producao_id"] for v in vinculadas]
+
+        d["ativo"] = bool(d.get("ativo", 1))
+        return d
+
     @staticmethod
     def obter_todos():
         """Retorna todos os pedidos ordenados do mais recente para o mais antigo."""
-        pedidos = JSONManager.carregar(ARQUIVO_PEDIDOS)
-        pedidos.sort(key=lambda x: int(x.get("id", 0)), reverse=True)
-        return pedidos
+        with SQLiteManager.conectar() as con:
+            rows = con.execute("SELECT * FROM pedidos ORDER BY id DESC").fetchall()
+            return [PedidoService._montar_dict(con, r) for r in rows]
 
     @staticmethod
     def obter_por_id(id_pedido):
         """Devolve o pedido com o id indicado, ou None se não existir."""
-        for p in PedidoService.obter_todos():
-            if p.get("id") == id_pedido:
-                return p
-        return None
+        with SQLiteManager.conectar() as con:
+            row = con.execute("SELECT * FROM pedidos WHERE id = ?", (id_pedido,)).fetchone()
+            if row is None:
+                return None
+            return PedidoService._montar_dict(con, row)
 
     @staticmethod
     def criar_pedido(requerente_email: str, nr_projeto: str, nome_projeto: str, tecnologia: str,
                       data_entrega: str, link_arquivos: str, observacoes: str, pecas: list):
-        """Aplica a regra de negócio para gerar um novo ID e salvar o pedido."""
+        """Cria um pedido novo. O ID é atribuído pelo SQLite (AUTOINCREMENT),
+        que garante unicidade mesmo com vários utilizadores em simultâneo —
+        deixa de ser preciso calcular max(id)+1 à mão sob lock de ficheiro."""
         hoje = datetime.now().strftime("%Y-%m-%d")
-        novo_pedido = {}
 
-        def _transformar(pedidos):
-            novo_id = max([int(p.get("id", 0)) for p in pedidos]) + 1 if pedidos else 1
-            novo_pedido.update({
-                "id": novo_id,
-                "requerente_email": requerente_email,
-                "nr_projeto": nr_projeto,
-                "nome_projeto": nome_projeto,
-                "tecnologia": tecnologia,
-                "observacoes": observacoes,
-                "data_pedido": hoje,
-                "data_entrega": data_entrega,
-                "data_atualizacao": hoje,
-                "link_arquivos": link_arquivos,
-                "estado": "Pendente",
-                "pecas": pecas,
-                "producoes_vinculadas": []
-            })
-            pedidos.append(novo_pedido)
-            return pedidos
+        with SQLiteManager.conectar() as con:
+            cur = con.execute(
+                """INSERT INTO pedidos (requerente_email, nr_projeto, nome_projeto, tecnologia,
+                    data_pedido, data_entrega, link_arquivos, observacoes, estado, ativo, data_atualizacao)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pendente', 1, ?)""",
+                (requerente_email, nr_projeto, nome_projeto, tecnologia,
+                 hoje, data_entrega, link_arquivos, observacoes, hoje),
+            )
+            novo_id = cur.lastrowid
 
-        # Lê, calcula o novo ID e grava sob um único lock, para dois pedidos
-        # criados ao mesmo tempo (rede partilhada) não colidirem no mesmo ID.
-        JSONManager.atualizar(ARQUIVO_PEDIDOS, _transformar)
-        return novo_pedido
+            for ordem, peca in enumerate(pecas or []):
+                con.execute(
+                    "INSERT INTO pedido_pecas (pedido_id, pn, material, qtd_solicitada, qtd_produzida, ordem) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (novo_id, peca.get("pn", ""), peca.get("material", ""),
+                     peca.get("qtd_solicitada", 0), peca.get("qtd_produzida", 0), ordem),
+                )
+
+            row = con.execute("SELECT * FROM pedidos WHERE id = ?", (novo_id,)).fetchone()
+            return PedidoService._montar_dict(con, row)
 
     @staticmethod
     def atualizar_pedido(pedido_atualizado: dict):
-        """Substitui o pedido com o mesmo id e renova a data de atualização."""
-        pedido_atualizado["data_atualizacao"] = datetime.now().strftime("%Y-%m-%d")
+        """Substitui o pedido com o mesmo id e renova a data de atualização.
+        As peças são recriadas de raiz a partir da lista recebida."""
+        hoje = datetime.now().strftime("%Y-%m-%d")
+        pid = pedido_atualizado.get("id")
 
-        def _transformar(pedidos):
-            for idx, p in enumerate(pedidos):
-                if p.get("id") == pedido_atualizado.get("id"):
-                    pedidos[idx] = pedido_atualizado
-                    break
-            return pedidos
+        with SQLiteManager.conectar() as con:
+            con.execute(
+                """UPDATE pedidos SET
+                    requerente_email=?, nr_projeto=?, nome_projeto=?, tecnologia=?,
+                    data_entrega=?, link_arquivos=?, observacoes=?, estado=?,
+                    ativo=?, data_atualizacao=?
+                   WHERE id=?""",
+                (
+                    pedido_atualizado.get("requerente_email", ""),
+                    pedido_atualizado.get("nr_projeto", ""),
+                    pedido_atualizado.get("nome_projeto", ""),
+                    pedido_atualizado.get("tecnologia", ""),
+                    pedido_atualizado.get("data_entrega", ""),
+                    pedido_atualizado.get("link_arquivos", ""),
+                    pedido_atualizado.get("observacoes", ""),
+                    pedido_atualizado.get("estado", "Em Andamento"),
+                    1 if pedido_atualizado.get("ativo", True) else 0,
+                    hoje, pid,
+                ),
+            )
 
-        JSONManager.atualizar(ARQUIVO_PEDIDOS, _transformar)
-        return pedido_atualizado
+            con.execute("DELETE FROM pedido_pecas WHERE pedido_id = ?", (pid,))
+            for ordem, peca in enumerate(pedido_atualizado.get("pecas", []) or []):
+                con.execute(
+                    "INSERT INTO pedido_pecas (pedido_id, pn, material, qtd_solicitada, qtd_produzida, ordem) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (pid, peca.get("pn", ""), peca.get("material", ""),
+                     peca.get("qtd_solicitada", 0), peca.get("qtd_produzida", 0), ordem),
+                )
+
+            row = con.execute("SELECT * FROM pedidos WHERE id = ?", (pid,)).fetchone()
+            return PedidoService._montar_dict(con, row)
 
     @staticmethod
     def alterar_estado(id_pedido, novo_estado: str):
@@ -90,34 +149,22 @@ class PedidoService:
         para não haver dois caminhos (edição completa vs. troca rápida de
         estado) com regras diferentes sobre quando essa data é tocada."""
         hoje = datetime.now().strftime("%Y-%m-%d")
-
-        def _transformar(pedidos):
-            for p in pedidos:
-                if p.get("id") == id_pedido:
-                    p["estado"] = novo_estado
-                    p["data_atualizacao"] = hoje
-                    break
-            return pedidos
-
-        JSONManager.atualizar(ARQUIVO_PEDIDOS, _transformar)
+        with SQLiteManager.conectar() as con:
+            con.execute(
+                "UPDATE pedidos SET estado = ?, data_atualizacao = ? WHERE id = ?",
+                (novo_estado, hoje, id_pedido),
+            )
 
     @staticmethod
     def eliminar_pedido(id_pedido):
         """Soft delete: marca o pedido como inativo e cancelado, mantendo o
         registo na base de dados."""
         hoje = datetime.now().strftime("%Y-%m-%d")
-
-        def _transformar(pedidos):
-            for p in pedidos:
-                if p.get("id") == id_pedido:
-                    p["ativo"] = False
-                    p["estado"] = "Cancelado"
-                    p["data_atualizacao"] = hoje
-                    break
-            return pedidos
-
-        JSONManager.atualizar(ARQUIVO_PEDIDOS, _transformar)
-
+        with SQLiteManager.conectar() as con:
+            con.execute(
+                "UPDATE pedidos SET ativo = 0, estado = 'Cancelado', data_atualizacao = ? WHERE id = ?",
+                (hoje, id_pedido),
+            )
 
     @staticmethod
     def importar_de_email(texto: str, lista_projetos_fmt: list, lista_materiais_fmt: list) -> dict:
@@ -245,25 +292,32 @@ class PedidoService:
             "pecas":        pecas,
         }
 
+
     @staticmethod
     def vincular_producao(ids_pedidos: list, id_producao):
-        """Liga uma produção aos pedidos que ela cobre: regista o id da
-        produção em 'producoes_vinculadas' (link inverso, hoje nunca escrito)
-        e marca os pedidos como Em Andamento."""
+        """Liga uma produção aos pedidos que ela cobre e marca-os como
+        Em Andamento. A ligação em si vive na tabela producao_pedidos —
+        a mesma que ProducaoService usa —, por isso este método garante
+        que ela existe e trata apenas da transição de estado do pedido."""
         hoje = datetime.now().strftime("%Y-%m-%d")
-
         ESTADOS_FINAIS = {"Entregue", "Concluído"}
 
-        def _transformar(pedidos):
-            for p in pedidos:
-                if p.get("id") in ids_pedidos:
-                    vinculadas = p.setdefault("producoes_vinculadas", [])
-                    if id_producao not in vinculadas:
-                        vinculadas.append(id_producao)
-                    # Não reverte um pedido já entregue/concluído para "Em Andamento"
-                    if p.get("estado") not in ESTADOS_FINAIS:
-                        p["estado"] = "Em Andamento"
-                    p["data_atualizacao"] = hoje
-            return pedidos
-
-        JSONManager.atualizar(ARQUIVO_PEDIDOS, _transformar)
+        with SQLiteManager.conectar() as con:
+            for pid in ids_pedidos or []:
+                con.execute(
+                    "INSERT OR IGNORE INTO producao_pedidos (producao_id, pedido_id) VALUES (?, ?)",
+                    (id_producao, pid),
+                )
+                row = con.execute("SELECT estado FROM pedidos WHERE id = ?", (pid,)).fetchone()
+                if row is None:
+                    continue
+                # Não reverte um pedido já entregue/concluído para "Em Andamento"
+                if row["estado"] not in ESTADOS_FINAIS:
+                    con.execute(
+                        "UPDATE pedidos SET estado = 'Em Andamento', data_atualizacao = ? WHERE id = ?",
+                        (hoje, pid),
+                    )
+                else:
+                    con.execute(
+                        "UPDATE pedidos SET data_atualizacao = ? WHERE id = ?", (hoje, pid),
+                    )

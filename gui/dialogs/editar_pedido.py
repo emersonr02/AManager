@@ -2,8 +2,6 @@ import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox
 
-from config.paths import ARQUIVO_PEDIDOS
-from database.json_manager import JSONManager
 from services.pedido_service import PedidoService
 from services.projeto_service import ProjetoService
 from services.material_service import MaterialService

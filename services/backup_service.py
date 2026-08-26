@@ -1,17 +1,20 @@
 """
-BackupService — snapshots automáticos dos ficheiros JSON que servem de
-base de dados. Protege contra corrupção de ficheiro, edição acidental, ou
-falhas da pasta de rede partilhada — sem precisar de SQL server.
+BackupService — snapshots automáticos da base de dados SQLite.
 
-Cada snapshot é uma pasta com timestamp dentro de data/backups/, contendo
-uma cópia de todos os *.json da pasta data/ nesse momento.
+Usa a API nativa de backup do SQLite (con.backup()) em vez de copiar o
+ficheiro com shutil: isso garante um snapshot consistente mesmo que
+outra pessoa esteja a escrever na BD no preciso momento do backup —
+uma cópia crua do ficheiro poderia apanhar um estado intermédio, ainda
+mais provável em WAL mode, onde parte dos dados vive no ficheiro -wal.
 """
 import os
-import shutil
 import glob
+import shutil
+import sqlite3
 from datetime import datetime
 
 from config.paths import DATA_DIR, BACKUP_DIR
+from database.sqlite_manager import ARQUIVO_DB
 
 
 class BackupService:
@@ -21,28 +24,29 @@ class BackupService:
         os.makedirs(BACKUP_DIR, exist_ok=True)
 
     @staticmethod
-    def _ficheiros_para_backup() -> list:
-        """Lista todos os *.json diretamente em DATA_DIR (não desce a
-        subpastas — em particular, nunca entra em BACKUP_DIR)."""
-        return [
-            f for f in glob.glob(os.path.join(DATA_DIR, "*.json"))
-            if os.path.isfile(f)
-        ]
-
-    @staticmethod
     def criar_snapshot(motivo: str = "manual") -> str:
-        """Cria um novo snapshot com todos os ficheiros JSON atuais.
+        """Cria um novo snapshot consistente da base de dados.
         Devolve o caminho da pasta de backup criada."""
         BackupService._garantir_pasta_backups()
 
         timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-        nome_pasta = f"{timestamp}_{motivo}"
-        caminho_snapshot = os.path.join(BACKUP_DIR, nome_pasta)
+        caminho_snapshot = os.path.join(BACKUP_DIR, f"{timestamp}_{motivo}")
         os.makedirs(caminho_snapshot, exist_ok=True)
 
-        for ficheiro in BackupService._ficheiros_para_backup():
-            destino = os.path.join(caminho_snapshot, os.path.basename(ficheiro))
-            shutil.copy2(ficheiro, destino)
+        destino_db = os.path.join(caminho_snapshot, "amanager.db")
+
+        if os.path.exists(ARQUIVO_DB):
+            # API nativa de backup: transacionalmente segura, mesmo com
+            # escritas concorrentes a decorrer noutro processo.
+            origem = sqlite3.connect(ARQUIVO_DB)
+            try:
+                destino = sqlite3.connect(destino_db)
+                try:
+                    origem.backup(destino)
+                finally:
+                    destino.close()
+            finally:
+                origem.close()
 
         return caminho_snapshot
 
@@ -59,7 +63,7 @@ class BackupService:
         )
 
     @staticmethod
-    def snapshot_automatico_diario() -> str | None:
+    def snapshot_automatico_diario():
         """Cria o backup do dia se ainda não existir nenhum. Idempotente —
         seguro chamar em todos os arranques da aplicação sem duplicar.
         Devolve o caminho criado, ou None se já havia backup de hoje."""
@@ -69,16 +73,21 @@ class BackupService:
 
     @staticmethod
     def listar_backups() -> list:
-        """Devolve a lista de snapshots existentes, mais recente primeiro,
-        com nome, caminho e nº de ficheiros guardados em cada um."""
+        """Devolve a lista de snapshots existentes, mais recente primeiro."""
         BackupService._garantir_pasta_backups()
         resultado = []
         for nome in sorted(os.listdir(BACKUP_DIR), reverse=True):
             caminho = os.path.join(BACKUP_DIR, nome)
             if not os.path.isdir(caminho):
                 continue
-            n_ficheiros = len(glob.glob(os.path.join(caminho, "*.json")))
-            resultado.append({"nome": nome, "caminho": caminho, "n_ficheiros": n_ficheiros})
+            caminho_db = os.path.join(caminho, "amanager.db")
+            tamanho = os.path.getsize(caminho_db) if os.path.exists(caminho_db) else 0
+            resultado.append({
+                "nome": nome,
+                "caminho": caminho,
+                "tem_db": os.path.exists(caminho_db),
+                "tamanho_bytes": tamanho,
+            })
         return resultado
 
     @staticmethod
@@ -93,19 +102,29 @@ class BackupService:
         return len(excedentes)
 
     @staticmethod
-    def restaurar_backup(nome_backup: str) -> list:
-        """Restaura os ficheiros de um snapshot para a pasta de dados
-        ativa, substituindo o conteúdo atual. Operação manual/administrativa
-        — não é chamada automaticamente em nenhum fluxo normal da app.
-        Devolve a lista de ficheiros restaurados."""
+    def restaurar_backup(nome_backup: str) -> str:
+        """Restaura a base de dados a partir de um snapshot, substituindo a
+        BD ativa. Operação manual/administrativa — nunca chamada
+        automaticamente. Devolve o caminho da BD restaurada.
+
+        IMPORTANTE: a app deve estar fechada durante o restauro."""
         caminho_snapshot = os.path.join(BACKUP_DIR, nome_backup)
         if not os.path.isdir(caminho_snapshot):
             raise FileNotFoundError(f"Backup '{nome_backup}' não encontrado.")
 
-        restaurados = []
-        for ficheiro in glob.glob(os.path.join(caminho_snapshot, "*.json")):
-            destino = os.path.join(DATA_DIR, os.path.basename(ficheiro))
-            shutil.copy2(ficheiro, destino)
-            restaurados.append(os.path.basename(ficheiro))
+        origem_db = os.path.join(caminho_snapshot, "amanager.db")
+        if not os.path.exists(origem_db):
+            raise FileNotFoundError(f"Backup '{nome_backup}' não contém amanager.db.")
 
-        return restaurados
+        os.makedirs(DATA_DIR, exist_ok=True)
+
+        # Remove ficheiros auxiliares do WAL da BD atual: se ficassem para
+        # trás, o SQLite tentaria reaplicá-los sobre a BD restaurada e
+        # corromperia o estado que acabámos de repor.
+        for sufixo in ("-wal", "-shm"):
+            aux = ARQUIVO_DB + sufixo
+            if os.path.exists(aux):
+                os.remove(aux)
+
+        shutil.copy2(origem_db, ARQUIVO_DB)
+        return ARQUIVO_DB

@@ -383,3 +383,54 @@ def test_migra_entrada_malformada_e_ignorada_sem_rebentar_tudo(ambiente_migracao
     with SQLiteManager.conectar() as con:
         maquinas = con.execute("SELECT * FROM maquinas").fetchall()
         assert len(maquinas) == 2  # as 2 válidas persistiram, a inválida foi ignorada
+
+
+def test_migra_pedido_preserva_id_original_com_buracos(ambiente_migracao):
+    """CRÍTICO: pedidos.json tem tipicamente IDs não sequenciais (buracos
+    de pedidos apagados ao longo do tempo). Se a migração remapeasse para
+    IDs sequenciais 1,2,3..., ProducaoService (já em SQLite) e PedidoService
+    (ainda em JSON, com os IDs originais) passariam a discordar sobre o
+    que cada ID significa — o dashboard juntaria cada produção ao pedido
+    ERRADO, trocando materiais/projetos sem nenhum erro visível."""
+    _escrever(ambiente_migracao["ARQUIVO_PEDIDOS"], [
+        {"id": 5, "nr_projeto": "236863", "nome_projeto": "PPS BEN",
+         "requerente_email": "a@ceiia.com", "data_pedido": "2026-08-01",
+         "data_entrega": "2026-08-10", "estado": "Em Andamento",
+         "pecas": [{"pn": "P1", "material": "PLA - Generic", "qtd_solicitada": 5, "qtd_produzida": 0}]},
+        {"id": 14, "nr_projeto": "257147", "nome_projeto": "PPS AquaFountain",
+         "requerente_email": "c@ceiia.com", "data_pedido": "2026-08-03",
+         "data_entrega": "2026-08-12", "estado": "Em Andamento",
+         "pecas": [{"pn": "P3", "material": "TPU 95A", "qtd_solicitada": 2, "qtd_produzida": 0}]},
+    ])
+    _escrever(ambiente_migracao["ARQUIVO_LOGS"], [
+        {"id": 1, "data_inicio": "2026-08-06", "estado": "Concluída",
+         "maquina": "Bambu Lab X1C #1", "pedidos_vinculados": [14]},
+    ])
+
+    import migrar_json_para_sqlite as migrador
+    from database.sqlite_manager import SQLiteManager
+    migrador.migrar()
+
+    with SQLiteManager.conectar() as con:
+        ids_pedidos = {r["id"] for r in con.execute("SELECT id FROM pedidos").fetchall()}
+        assert ids_pedidos == {5, 14}, f"IDs deviam ser preservados exatamente, veio {ids_pedidos}"
+
+        vinculo = con.execute("SELECT * FROM producao_pedidos").fetchone()
+        assert vinculo["pedido_id"] == 14, "Produção deve continuar ligada ao pedido 14, não a outro"
+
+
+def test_migra_pedido_id_nao_numerico_cai_para_autoincrement(ambiente_migracao):
+    """Se por algum motivo o id não for um número válido, não deve rebentar
+    — cai para atribuição automática em vez de preservar o id original."""
+    _escrever(ambiente_migracao["ARQUIVO_PEDIDOS"], [
+        {"id": "abc", "nr_projeto": "X", "nome_projeto": "Y", "requerente_email": "a@ceiia.com",
+         "data_pedido": "2026-08-01", "data_entrega": "2026-08-10", "estado": "Em Andamento", "pecas": []},
+    ])
+    import migrar_json_para_sqlite as migrador
+    from database.sqlite_manager import SQLiteManager
+    migrador.migrar()  # não deve lançar exceção
+
+    with SQLiteManager.conectar() as con:
+        pedido = con.execute("SELECT * FROM pedidos").fetchone()
+        assert pedido is not None
+        assert isinstance(pedido["id"], int)

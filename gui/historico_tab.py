@@ -5,7 +5,6 @@ from tkinter import ttk, messagebox, filedialog
 import os
 
 from services.maquina_service import MaquinaService
-from database.json_manager import JSONManager
 from services.producao_service import ProducaoService
 from services.pedido_service import PedidoService
 from services.export_service import ExportService

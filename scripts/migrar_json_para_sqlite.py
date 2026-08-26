@@ -180,16 +180,46 @@ def migrar_pedidos(con) -> dict:
     dados = _filtrar_dicts(_carregar_json(ARQUIVO_PEDIDOS), "pedidos.json")
     id_antigo_para_novo = {}
     for p in dados:
-        cur = con.execute(
-            "INSERT INTO pedidos (requerente_email, nr_projeto, nome_projeto, tecnologia, "
-            "data_pedido, data_entrega, link_arquivos, observacoes, estado, data_atualizacao) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (p.get("requerente_email", ""), p.get("nr_projeto", ""), p.get("nome_projeto", ""),
-             p.get("tecnologia", ""), p.get("data_pedido", ""), p.get("data_entrega", ""),
-             p.get("link_arquivos", ""), p.get("observacoes", ""),
-             p.get("estado", "Em Andamento"), p.get("data_atualizacao", "")),
-        )
-        novo_id = cur.lastrowid
+        # Preserva o ID original do JSON em vez de deixar o SQLite atribuir
+        # um novo sequencial. Isto é essencial enquanto PedidoService ainda
+        # não foi migrado: ele continua a devolver os IDs originais do
+        # pedidos.json, e ProducaoService (já em SQLite) usa os IDs que
+        # aqui gravarmos para as ligações pedidos_vinculados. Se estes dois
+        # espaços de ID divergissem (ex: por reatribuição sequencial 1,2,3…
+        # quando o JSON tinha buracos como 5,6,8,9…), o dashboard passaria
+        # a juntar cada produção ao pedido ERRADO — material, projeto e
+        # requerente trocados sem qualquer erro visível.
+        id_original = p.get("id")
+        try:
+            id_original = int(id_original)
+        except (TypeError, ValueError):
+            id_original = None
+
+        if id_original is not None:
+            con.execute(
+                "INSERT INTO pedidos (id, requerente_email, nr_projeto, nome_projeto, tecnologia, "
+                "data_pedido, data_entrega, link_arquivos, observacoes, estado, data_atualizacao) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (id_original, p.get("requerente_email", ""), p.get("nr_projeto", ""), p.get("nome_projeto", ""),
+                 p.get("tecnologia", ""), p.get("data_pedido", ""), p.get("data_entrega", ""),
+                 p.get("link_arquivos", ""), p.get("observacoes", ""),
+                 p.get("estado", "Em Andamento"), p.get("data_atualizacao", "")),
+            )
+            novo_id = id_original
+        else:
+            # Sem ID original válido (nunca deveria acontecer, mas por
+            # segurança): cai para o comportamento anterior de auto-gerar.
+            cur = con.execute(
+                "INSERT INTO pedidos (requerente_email, nr_projeto, nome_projeto, tecnologia, "
+                "data_pedido, data_entrega, link_arquivos, observacoes, estado, data_atualizacao) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (p.get("requerente_email", ""), p.get("nr_projeto", ""), p.get("nome_projeto", ""),
+                 p.get("tecnologia", ""), p.get("data_pedido", ""), p.get("data_entrega", ""),
+                 p.get("link_arquivos", ""), p.get("observacoes", ""),
+                 p.get("estado", "Em Andamento"), p.get("data_atualizacao", "")),
+            )
+            novo_id = cur.lastrowid
+
         id_antigo_para_novo[p.get("id")] = novo_id
 
         for ordem, peca in enumerate(p.get("pecas", [])):

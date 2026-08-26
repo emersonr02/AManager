@@ -38,9 +38,9 @@ def test_definir_ativo_desativa_e_reativa(arquivo_projetos):
     assert len(ProjetoService.obter_todos()) == 1
 
 
-def test_normaliza_entradas_legadas_em_formato_de_string(arquivo_projetos):
-    JSONManager.salvar(["257147 - PPS AquaFountain"], arquivo_projetos)
-
-    projetos = ProjetoService.obter_todos()
-
-    assert projetos == [{"id": "257147", "nome": "PPS AquaFountain", "ativo": True}]
+def test_normalizar_converte_entrada_legada_em_formato_de_string():
+    """A conversão de formatos legados deixou de acontecer em runtime: os
+    dados na BD já estão sempre canónicos (a migração converteu-os uma vez).
+    O método _normalizar mantém-se para normalizar inputs de fontes
+    externas — é isso que se testa aqui, diretamente."""
+    assert ProjetoService._normalizar("257147 - PPS AquaFountain") == {"id": "257147", "nome": "PPS AquaFountain", "ativo": True}

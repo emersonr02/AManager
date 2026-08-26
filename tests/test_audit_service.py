@@ -8,11 +8,9 @@ from services.audit_service import AuditService
 
 
 @pytest.fixture
-def arquivo_audit(tmp_path, monkeypatch):
-    from services import audit_service
-    caminho = tmp_path / "audit_log.json"
-    monkeypatch.setattr(audit_service, "ARQUIVO_AUDIT_LOG", str(caminho))
-    return str(caminho)
+def arquivo_audit(db_sqlite):
+    """AuditService migrou para SQLite — usa a BD isolada partilhada."""
+    return db_sqlite
 
 
 def test_registrar_cria_entrada_com_todos_os_campos(arquivo_audit):
@@ -73,17 +71,21 @@ def test_obter_historico_filtra_por_id(arquivo_audit):
 
     so_id_1 = AuditService.obter_historico(entidade="producao", id_entidade=1)
     assert len(so_id_1) == 1
-    assert so_id_1[0]["id_entidade"] == 1
+    # id_entidade é guardado como TEXT na BD: o log serve entidades com ID
+    # numérico (produções, pedidos) e textual (máquinas, ex: "X1-1"), por
+    # isso normaliza-se tudo para string. O filtro aceita ambos os tipos.
+    assert so_id_1[0]["id_entidade"] == "1"
 
 
 def test_obter_historico_ordena_do_mais_recente(arquivo_audit):
-    from database.json_manager import JSONManager
+    from database.sqlite_manager import SQLiteManager
     # Injeta entradas com timestamps explicitamente distintos — evita
     # depender da resolução de segundos do relógio real em testes rápidos.
-    JSONManager.salvar([
-        {"timestamp": "2026-08-25 10:00:00", "entidade": "producao", "id_entidade": 1, "campo": "campo1"},
-        {"timestamp": "2026-08-25 10:05:00", "entidade": "producao", "id_entidade": 1, "campo": "campo2"},
-    ], arquivo_audit)
+    with SQLiteManager.conectar() as con:
+        for ts, campo in [("2026-08-25 10:00:00", "campo1"), ("2026-08-25 10:05:00", "campo2")]:
+            con.execute(
+                "INSERT INTO audit_log (timestamp, utilizador, entidade, id_entidade, campo) "
+                "VALUES (?, 'teste', 'producao', '1', ?)", (ts, campo))
     historico = AuditService.obter_historico(entidade="producao", id_entidade=1)
     assert historico[0]["campo"] == "campo2"  # timestamp mais recente primeiro
     assert historico[1]["campo"] == "campo1"

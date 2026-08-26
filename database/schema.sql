@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS pedidos (
     link_arquivos       TEXT NOT NULL DEFAULT '',
     observacoes         TEXT NOT NULL DEFAULT '',
     estado              TEXT NOT NULL DEFAULT 'Em Andamento',
+    ativo               INTEGER NOT NULL DEFAULT 1,
     data_atualizacao    TEXT NOT NULL
 );
 

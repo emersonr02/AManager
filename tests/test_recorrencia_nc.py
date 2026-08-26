@@ -8,29 +8,20 @@ from datetime import datetime, timedelta
 from services.nc_service import NCService
 
 
-def _seed_nc(caminho_falhas, caminho_acoes, db_sqlite=None):
-    from database.json_manager import JSONManager
-    JSONManager.salvar([
-        {"cod": "COD002", "descricao": "Falha de adesão", "tecnologia": "FDM"},
-    ], caminho_falhas)
-    JSONManager.salvar([], caminho_acoes)
-
-    # NCService ainda lê o catálogo (descrições) de JSON, mas ProducaoService
-    # já vive em SQLite e tem uma FK de nc_codigo -> nc_falhas.cod. Durante
-    # esta fase de transição, replica-se o código NC também na tabela SQLite
-    # só para satisfazer a constraint — quando NCService for migrado, esta
-    # duplicação deixa de ser necessária.
-    if db_sqlite:
-        from database.sqlite_manager import SQLiteManager
-        with SQLiteManager.conectar() as con:
-            con.execute(
-                "INSERT OR IGNORE INTO nc_falhas (cod, descricao, tecnologia) VALUES (?, ?, ?)",
-                ("COD002", "Falha de adesão", "FDM"),
-            )
-            con.execute(
-                "INSERT OR IGNORE INTO acoes_corretivas (act, acao, tecnologia) VALUES (?, ?, ?)",
-                ("ACT001", "Ação de teste", "FDM"),
-            )
+def _seed_nc(caminho_falhas=None, caminho_acoes=None, db_sqlite=None):
+    """NCService migrou para SQLite — semeia o catálogo diretamente na BD.
+    Mantém a assinatura antiga (argumentos ignorados) para não ter de
+    reescrever as ~10 chamadas existentes neste ficheiro."""
+    from database.sqlite_manager import SQLiteManager
+    with SQLiteManager.conectar() as con:
+        con.execute(
+            "INSERT OR IGNORE INTO nc_falhas (cod, descricao, tecnologia) VALUES (?, ?, ?)",
+            ("COD002", "Falha de adesão", "FDM"),
+        )
+        con.execute(
+            "INSERT OR IGNORE INTO acoes_corretivas (act, acao, tecnologia) VALUES (?, ?, ?)",
+            ("ACT001", "Ação de teste", "FDM"),
+        )
 
 
 def _seed_producoes(caminho_db, logs):
@@ -165,13 +156,12 @@ def test_formatar_alerta_recorrencia_lista_vazia():
 
 
 def test_formatar_alerta_recorrencia_ordena_por_contagem(arquivos_nc):
-    caminho_falhas, caminho_acoes = arquivos_nc
-    from database.json_manager import JSONManager
-    JSONManager.salvar([
-        {"cod": "COD001", "descricao": "Obstrução", "tecnologia": "FDM"},
-        {"cod": "COD002", "descricao": "Adesão", "tecnologia": "FDM"},
-    ], caminho_falhas)
-    JSONManager.salvar([], caminho_acoes)
+    from database.sqlite_manager import SQLiteManager
+    with SQLiteManager.conectar() as con:
+        con.execute("INSERT OR IGNORE INTO nc_falhas (cod, descricao, tecnologia) "
+                    "VALUES ('COD001', 'Obstrução', 'FDM')")
+        con.execute("INSERT OR IGNORE INTO nc_falhas (cod, descricao, tecnologia) "
+                    "VALUES ('COD002', 'Adesão', 'FDM')")
 
     msg = NCService.formatar_alerta_recorrencia({"COD001": 2, "COD002": 5})
     linhas = msg.split("\n")

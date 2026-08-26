@@ -1,61 +1,78 @@
 """
-Testes do BackupService — snapshots automáticos e rotação dos ficheiros
-JSON que servem de base de dados.
+Testes do BackupService — snapshots da base de dados SQLite.
+
+Usa a API nativa con.backup() em vez de cópia crua do ficheiro, o que
+garante snapshots consistentes mesmo com escritas concorrentes.
 """
 import os
 import time
+import sqlite3
 import pytest
 
 
 @pytest.fixture
 def ambiente_backup(tmp_path, monkeypatch):
-    """Isola DATA_DIR e BACKUP_DIR num diretório temporário, com alguns
-    ficheiros JSON de exemplo já criados."""
+    """Isola DATA_DIR, BACKUP_DIR e a BD num diretório temporário, com
+    algumas linhas já inseridas para os snapshots terem conteúdo real."""
     from services import backup_service
+    from database import sqlite_manager
 
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     backup_dir = data_dir / "backups"
+    caminho_db = data_dir / "amanager.db"
 
+    monkeypatch.setattr(sqlite_manager, "ARQUIVO_DB", str(caminho_db))
+    monkeypatch.setattr(backup_service, "ARQUIVO_DB", str(caminho_db))
     monkeypatch.setattr(backup_service, "DATA_DIR", str(data_dir))
     monkeypatch.setattr(backup_service, "BACKUP_DIR", str(backup_dir))
 
-    for nome, conteudo in [
-        ("producao_i3D.json", '[{"id": 1}]'),
-        ("pedidos.json", '[{"id": 5}]'),
-        ("parque_maquinas.json", '[{"id": "X1-1"}]'),
-    ]:
-        (data_dir / nome).write_text(conteudo, encoding="utf-8")
+    sqlite_manager.SQLiteManager.garantir_esquema()
+    with sqlite_manager.SQLiteManager.conectar() as con:
+        con.execute("INSERT INTO maquinas (id, nome, tech) VALUES ('X1-1', 'Bambu Lab X1C #1', 'FDM')")
+        con.execute("INSERT INTO producoes (data_inicio, tecnologia, maquina_nome) "
+                    "VALUES ('2026-08-01', 'FDM', 'Bambu Lab X1C #1')")
 
-    return str(data_dir), str(backup_dir)
+    return {"data_dir": str(data_dir), "backup_dir": str(backup_dir), "db": str(caminho_db)}
 
 
-def test_criar_snapshot_copia_todos_os_json(ambiente_backup):
+def _contar(caminho_db, tabela):
+    con = sqlite3.connect(caminho_db)
+    try:
+        return con.execute(f"SELECT COUNT(*) FROM {tabela}").fetchone()[0]
+    finally:
+        con.close()
+
+
+def test_criar_snapshot_gera_copia_da_bd(ambiente_backup):
     from services.backup_service import BackupService
     caminho = BackupService.criar_snapshot("manual")
     assert os.path.isdir(caminho)
-    ficheiros = set(os.listdir(caminho))
-    assert ficheiros == {"producao_i3D.json", "pedidos.json", "parque_maquinas.json"}
+    assert os.path.exists(os.path.join(caminho, "amanager.db"))
 
 
 def test_criar_snapshot_preserva_conteudo(ambiente_backup):
     from services.backup_service import BackupService
     caminho = BackupService.criar_snapshot("manual")
-    with open(os.path.join(caminho, "pedidos.json")) as f:
-        assert f.read() == '[{"id": 5}]'
+    db_backup = os.path.join(caminho, "amanager.db")
+    assert _contar(db_backup, "maquinas") == 1
+    assert _contar(db_backup, "producoes") == 1
 
 
-def test_criar_snapshot_nao_desce_a_subpastas(ambiente_backup):
-    """Um backup anterior (pasta dentro de BACKUP_DIR) nunca deve ser
-    copiado para dentro de si mesmo — só ficheiros *.json de DATA_DIR."""
+def test_criar_snapshot_sem_bd_nao_rebenta(tmp_path, monkeypatch):
+    """Primeira execução, antes de qualquer BD existir: deve criar a pasta
+    do snapshot sem erro, apenas sem ficheiro lá dentro."""
+    from services import backup_service
     from services.backup_service import BackupService
-    caminho1 = BackupService.criar_snapshot("manual")
-    # Um segundo snapshot não deve conter a pasta do primeiro
-    time.sleep(1.1)
-    caminho2 = BackupService.criar_snapshot("manual")
-    conteudo2 = os.listdir(caminho2)
-    assert all(f.endswith(".json") for f in conteudo2)
-    assert "backups" not in conteudo2
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setattr(backup_service, "ARQUIVO_DB", str(data_dir / "inexistente.db"))
+    monkeypatch.setattr(backup_service, "DATA_DIR", str(data_dir))
+    monkeypatch.setattr(backup_service, "BACKUP_DIR", str(data_dir / "backups"))
+
+    caminho = BackupService.criar_snapshot("manual")
+    assert os.path.isdir(caminho)
 
 
 def test_ja_existe_backup_hoje_inicialmente_falso(ambiente_backup):
@@ -95,22 +112,23 @@ def test_listar_backups_ordena_do_mais_recente(ambiente_backup):
     assert "primeiro" in backups[1]["nome"]
 
 
-def test_listar_backups_conta_ficheiros(ambiente_backup):
+def test_listar_backups_reporta_tamanho_e_presenca_da_bd(ambiente_backup):
     from services.backup_service import BackupService
     BackupService.criar_snapshot("manual")
-    backups = BackupService.listar_backups()
-    assert backups[0]["n_ficheiros"] == 3
+    b = BackupService.listar_backups()[0]
+    assert b["tem_db"] is True
+    assert b["tamanho_bytes"] > 0
 
 
 def test_limpar_backups_antigos_mantem_apenas_os_recentes(ambiente_backup):
     from services.backup_service import BackupService
-    for i in range(5):
+    for i in range(4):
         BackupService.criar_snapshot(f"snap{i}")
         time.sleep(1.1)
-    assert len(BackupService.listar_backups()) == 5
+    assert len(BackupService.listar_backups()) == 4
 
     removidos = BackupService.limpar_backups_antigos(manter=2)
-    assert removidos == 3
+    assert removidos == 2
     assert len(BackupService.listar_backups()) == 2
 
 
@@ -128,23 +146,31 @@ def test_limpar_backups_antigos_mantem_os_mais_recentes(ambiente_backup):
 
 def test_restaurar_backup_repoe_conteudo_original(ambiente_backup):
     from services.backup_service import BackupService
-    data_dir, _ = ambiente_backup
+    from database import sqlite_manager
+
     caminho = BackupService.criar_snapshot("manual")
     nome_backup = os.path.basename(caminho)
 
-    # Corrompe o ficheiro atual
-    caminho_pedidos = os.path.join(data_dir, "pedidos.json")
-    with open(caminho_pedidos, "w") as f:
-        f.write("CORROMPIDO")
+    # Altera a BD ativa depois do snapshot
+    with sqlite_manager.SQLiteManager.conectar() as con:
+        con.execute("DELETE FROM producoes")
+    assert _contar(ambiente_backup["db"], "producoes") == 0
 
-    restaurados = BackupService.restaurar_backup(nome_backup)
-    assert "pedidos.json" in restaurados
-
-    with open(caminho_pedidos) as f:
-        assert f.read() == '[{"id": 5}]'
+    BackupService.restaurar_backup(nome_backup)
+    assert _contar(ambiente_backup["db"], "producoes") == 1
 
 
 def test_restaurar_backup_inexistente_leva_erro(ambiente_backup):
     from services.backup_service import BackupService
     with pytest.raises(FileNotFoundError):
         BackupService.restaurar_backup("nao_existe_2020-01-01_000000_manual")
+
+
+def test_restaurar_backup_sem_db_leva_erro(ambiente_backup):
+    """Uma pasta de backup vazia (ex: snapshot criado antes de existir BD)
+    não deve ser silenciosamente aceite como restauro válido."""
+    from services.backup_service import BackupService
+    vazio = os.path.join(ambiente_backup["backup_dir"], "2020-01-01_000000_vazio")
+    os.makedirs(vazio, exist_ok=True)
+    with pytest.raises(FileNotFoundError):
+        BackupService.restaurar_backup("2020-01-01_000000_vazio")

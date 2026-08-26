@@ -76,9 +76,22 @@ def test_eliminar_pedido_faz_soft_delete(arquivo_pedidos):
     assert encontrado["estado"] == "Cancelado"
 
 
+def _seed_producao_dummy(producao_id=10):
+    """Cria uma produção mínima via SQL. A ligação produção<->pedido é agora
+    uma FK real: a produção tem de existir para o vínculo poder ser criado."""
+    from database.sqlite_manager import SQLiteManager
+    with SQLiteManager.conectar() as con:
+        con.execute(
+            "INSERT OR IGNORE INTO producoes (id, data_inicio, tecnologia, maquina_nome) "
+            "VALUES (?, '2026-01-01', 'FDM', 'Máquina Teste')",
+            (producao_id,),
+        )
+
+
 def test_vincular_producao_regista_link_inverso_e_estado(arquivo_pedidos):
     p1 = _criar(arquivo_pedidos)
     p2 = _criar(arquivo_pedidos)
+    _seed_producao_dummy(10)
 
     PedidoService.vincular_producao([p1["id"], p2["id"]], 10)
 
@@ -90,6 +103,7 @@ def test_vincular_producao_regista_link_inverso_e_estado(arquivo_pedidos):
 
 def test_vincular_producao_nao_duplica_id_ja_presente(arquivo_pedidos):
     p1 = _criar(arquivo_pedidos)
+    _seed_producao_dummy(10)
 
     PedidoService.vincular_producao([p1["id"]], 10)
     PedidoService.vincular_producao([p1["id"]], 10)

@@ -37,10 +37,11 @@ def _producao(id_=1, **overrides):
 
 
 def test_exportar_historico_csv_gera_linha_de_auditoria_completa(tmp_path, monkeypatch, arquivos_nc):
-    from database.json_manager import JSONManager
-    caminho_falhas, caminho_acoes = arquivos_nc
-    JSONManager.salvar([{"cod": "COD001", "descricao": "Obstrução do bico", "tecnologia": "FDM"}], caminho_falhas)
-    JSONManager.salvar([{"acao": "Limpeza do nozzle", "codigos_aplicaveis": ["COD001"]}], caminho_acoes)
+    from conftest import seed_nc_falhas, seed_acoes_corretivas
+    seed_nc_falhas([{"cod": "COD001", "descricao": "Obstrução do bico", "tecnologia": "FDM"}])
+    seed_acoes_corretivas([
+        {"act": "ACT001", "acao": "Limpeza do nozzle", "codigos_aplicaveis": ["COD001"]},
+    ])
 
     caminho_csv = tmp_path / "auditoria.csv"
     ok = ExportService.exportar_historico_csv(str(caminho_csv), [_producao()], [_pedido(1)])
@@ -75,7 +76,7 @@ def test_exportar_historico_csv_gera_linha_de_auditoria_completa(tmp_path, monke
     assert dados["AÇÕES CORRETIVAS SUGERIDAS"] == "Limpeza do nozzle"
 
 
-def test_exportar_historico_csv_inclui_resumos_pareto(tmp_path):
+def test_exportar_historico_csv_inclui_resumos_pareto(tmp_path, arquivos_nc):
     caminho_csv = tmp_path / "auditoria.csv"
     producoes = [
         _producao(id_=1, maquina="X1C-1", tempo_real="01:00", quantidade_real="100"),
@@ -90,6 +91,6 @@ def test_exportar_historico_csv_inclui_resumos_pareto(tmp_path):
     assert "X1C-1;03:00" in conteudo.replace("\r\n", "\n")
 
 
-def test_exportar_historico_csv_devolve_false_em_caminho_invalido():
+def test_exportar_historico_csv_devolve_false_em_caminho_invalido(arquivos_nc):
     ok = ExportService.exportar_historico_csv("/caminho/inexistente/auditoria.csv", [], [])
     assert ok is False

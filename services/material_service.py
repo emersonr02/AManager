@@ -1,12 +1,20 @@
-from database.json_manager import JSONManager
-from config.paths import ARQUIVO_MATERIAIS
+"""
+MaterialService — catálogo de materiais, sobre SQLite.
+
+A chave de negócio é o par (nome, fabricante) — garantida por uma
+constraint UNIQUE no esquema, em vez de ser verificada manualmente em
+Python a cada operação como acontecia na versão JSON.
+"""
+from database.sqlite_manager import SQLiteManager
 
 
 class MaterialService:
 
     @staticmethod
     def _normalizar(entrada):
-        """Converte uma entrada legada (string 'nome - fabricante') para o formato canónico."""
+        """Converte uma entrada legada (string 'nome - fabricante') para o
+        formato canónico. Com os dados já em SQLite raramente é preciso,
+        mas mantém-se para normalizar inputs de fontes externas."""
         if isinstance(entrada, dict):
             return {
                 "nome": entrada.get("nome", entrada.get("material", entrada.get("nome_material", ""))),
@@ -22,50 +30,50 @@ class MaterialService:
 
     @staticmethod
     def obter_todos(incluir_inativos: bool = False):
-        materiais = [MaterialService._normalizar(m) for m in JSONManager.carregar(ARQUIVO_MATERIAIS)]
-        if incluir_inativos:
-            return materiais
-        return [m for m in materiais if m.get("ativo", True)]
+        with SQLiteManager.conectar() as con:
+            if incluir_inativos:
+                rows = con.execute("SELECT * FROM materiais ORDER BY nome, fabricante").fetchall()
+            else:
+                rows = con.execute(
+                    "SELECT * FROM materiais WHERE ativo = 1 ORDER BY nome, fabricante"
+                ).fetchall()
+            return [
+                {"nome": r["nome"], "fabricante": r["fabricante"], "ativo": bool(r["ativo"])}
+                for r in rows
+            ]
 
     @staticmethod
-    def _existe(materiais, nome, fabricante):
-        return any(m["nome"] == nome and m["fabricante"] == fabricante for m in materiais)
+    def _existe(con, nome, fabricante) -> bool:
+        row = con.execute(
+            "SELECT 1 FROM materiais WHERE nome = ? AND fabricante = ?", (nome, fabricante)
+        ).fetchone()
+        return row is not None
 
     @staticmethod
     def criar_material(nome: str, fabricante: str = ""):
-        def _transformar(materiais):
-            normalizados = [MaterialService._normalizar(m) for m in materiais]
-            if MaterialService._existe(normalizados, nome, fabricante):
+        with SQLiteManager.conectar() as con:
+            if MaterialService._existe(con, nome, fabricante):
                 raise ValueError("Este material já existe.")
-            normalizados.append({"nome": nome, "fabricante": fabricante, "ativo": True})
-            return normalizados
-
-        return JSONManager.atualizar(ARQUIVO_MATERIAIS, _transformar)
+            con.execute(
+                "INSERT INTO materiais (nome, fabricante, ativo) VALUES (?, ?, 1)",
+                (nome, fabricante),
+            )
 
     @staticmethod
     def atualizar_material(nome_atual: str, fabricante_atual: str, novo_nome: str, novo_fabricante: str):
-        def _transformar(materiais):
-            normalizados = [MaterialService._normalizar(m) for m in materiais]
+        with SQLiteManager.conectar() as con:
             mudou_chave = (novo_nome, novo_fabricante) != (nome_atual, fabricante_atual)
-            if mudou_chave and MaterialService._existe(normalizados, novo_nome, novo_fabricante):
+            if mudou_chave and MaterialService._existe(con, novo_nome, novo_fabricante):
                 raise ValueError("Já existe um material com esse nome e fabricante.")
-            for m in normalizados:
-                if m["nome"] == nome_atual and m["fabricante"] == fabricante_atual:
-                    m["nome"] = novo_nome
-                    m["fabricante"] = novo_fabricante
-                    break
-            return normalizados
-
-        return JSONManager.atualizar(ARQUIVO_MATERIAIS, _transformar)
+            con.execute(
+                "UPDATE materiais SET nome = ?, fabricante = ? WHERE nome = ? AND fabricante = ?",
+                (novo_nome, novo_fabricante, nome_atual, fabricante_atual),
+            )
 
     @staticmethod
     def definir_ativo(nome: str, fabricante: str, ativo: bool):
-        def _transformar(materiais):
-            normalizados = [MaterialService._normalizar(m) for m in materiais]
-            for m in normalizados:
-                if m["nome"] == nome and m["fabricante"] == fabricante:
-                    m["ativo"] = ativo
-                    break
-            return normalizados
-
-        return JSONManager.atualizar(ARQUIVO_MATERIAIS, _transformar)
+        with SQLiteManager.conectar() as con:
+            con.execute(
+                "UPDATE materiais SET ativo = ? WHERE nome = ? AND fabricante = ?",
+                (1 if ativo else 0, nome, fabricante),
+            )

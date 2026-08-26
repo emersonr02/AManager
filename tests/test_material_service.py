@@ -45,9 +45,9 @@ def test_definir_ativo_desativa_e_reativa(arquivo_materiais):
     assert len(MaterialService.obter_todos()) == 1
 
 
-def test_normaliza_entradas_legadas_em_formato_de_string(arquivo_materiais):
-    JSONManager.salvar(["PA12 - 3DSystems"], arquivo_materiais)
-
-    materiais = MaterialService.obter_todos()
-
-    assert materiais == [{"nome": "PA12", "fabricante": "3DSystems", "ativo": True}]
+def test_normalizar_converte_entrada_legada_em_formato_de_string():
+    """A conversão de formatos legados deixou de acontecer em runtime: os
+    dados na BD já estão sempre canónicos (a migração converteu-os uma vez).
+    O método _normalizar mantém-se para normalizar inputs de fontes
+    externas — é isso que se testa aqui, diretamente."""
+    assert MaterialService._normalizar("PLA - Generic") == {"nome": "PLA", "fabricante": "Generic", "ativo": True}

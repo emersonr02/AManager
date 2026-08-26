@@ -9,17 +9,19 @@ from services.nc_service import NCService
 from services.export_service import ExportService
 
 
-def _seed_nc_e_acoes(caminho_falhas, caminho_acoes):
-    from database.json_manager import JSONManager
-    JSONManager.salvar([
+def _seed_nc_e_acoes(caminho_falhas=None, caminho_acoes=None):
+    """Catálogos NC agora em SQLite. Argumentos mantidos (ignorados) para
+    não ter de reescrever as chamadas existentes."""
+    from conftest import seed_nc_falhas, seed_acoes_corretivas
+    seed_nc_falhas([
         {"cod": "COD001", "descricao": "Obstrução do bico", "tecnologia": "FDM"},
         {"cod": "COD002", "descricao": "Falha de adesão", "tecnologia": "FDM"},
-    ], caminho_falhas)
-    JSONManager.salvar([
+    ])
+    seed_acoes_corretivas([
         {"act": "ACT001", "acao": "Limpeza do nozzle", "codigos_aplicaveis": ["COD001"]},
         {"act": "ACT002", "acao": "Verificação do alinhamento", "codigos_aplicaveis": ["COD001", "COD002"]},
         {"act": "ACT004", "acao": "Troca do filamento", "codigos_aplicaveis": ["COD001", "COD002"]},
-    ], caminho_acoes)
+    ])
 
 
 # ── NCService: resolução de nomes de ação ──────────────────────────────────────

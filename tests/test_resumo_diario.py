@@ -13,23 +13,10 @@ from datetime import datetime
 
 
 @pytest.fixture
-def ambiente_resumo(tmp_path, monkeypatch):
-    from services import nc_service
-    from database.json_manager import JSONManager
-    from database import sqlite_manager
-
-    caminho_nc = tmp_path / "nc.json"
-    caminho_acoes = tmp_path / "acoes.json"
-    monkeypatch.setattr(nc_service, "ARQUIVO_NC_FALHAS", str(caminho_nc))
-    monkeypatch.setattr(nc_service, "ARQUIVO_ACOES", str(caminho_acoes))
-    JSONManager.salvar([], str(caminho_nc))
-    JSONManager.salvar([], str(caminho_acoes))
-
-    caminho_db = tmp_path / "amanager_teste.db"
-    monkeypatch.setattr(sqlite_manager, "ARQUIVO_DB", str(caminho_db))
-    sqlite_manager.SQLiteManager.garantir_esquema()
-
-    return {"db": str(caminho_db), "nc": str(caminho_nc), "acoes": str(caminho_acoes)}
+def ambiente_resumo(db_sqlite):
+    """Todos os services envolvidos (Producao, Maquina, NC) já usam SQLite —
+    basta a BD isolada partilhada."""
+    return {"db": db_sqlite}
 
 
 def _seed_logs(ambiente, logs):
@@ -87,8 +74,12 @@ def test_resumo_diario_com_dados_mistos(tmp_path, ambiente_resumo):
         {"id": "EnderS1-4", "nome": "Ender S1 Pro #4", "estado": "Manutenção - Parado", "manutencao": "Troca de nozzle"},
         {"id": "X1C-1", "nome": "Bambu Lab X1C #1", "estado": "Operacional"},
     ])
-    from database.json_manager import JSONManager
-    JSONManager.salvar([{"cod": "COD003", "descricao": "Encolhimento", "tecnologia": "FDM"}], ambiente_resumo["nc"])
+    # Catálogo NC agora vive em SQLite; _seed_logs já cria o código pela FK,
+    # aqui só se preenche a descrição real para o PDF a poder mostrar.
+    from database.sqlite_manager import SQLiteManager
+    with SQLiteManager.conectar() as con:
+        con.execute("INSERT OR REPLACE INTO nc_falhas (cod, descricao, tecnologia) "
+                    "VALUES ('COD003', 'Encolhimento', 'FDM')")
 
     from services.pdf_service import PDFService
     caminho_saida = str(tmp_path / "resumo.pdf")
