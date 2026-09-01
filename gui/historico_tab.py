@@ -295,7 +295,7 @@ class HistoricoTab:
             "projeto":  lambda l: str(l.get("nr_projeto", "")),
             "maquina":  lambda l: ProducaoService.normalizar_maquina(l, _id_para_nome),
             "material": lambda l: str(l.get("material", "")),
-            "qnt":      lambda l: float(str(l.get("quantidade_real") or l.get("quantidade_consumida") or l.get("quantidade") or 0).replace(",",".")),
+            "qnt":      lambda l: float(str(l.get("quantidade_real") or ProducaoService.estimar_quantidade(l) or l.get("quantidade") or 0).replace(",",".")),
             "tempo":    lambda l: ProducaoService.converter_para_horas(ProducaoService.normalizar_tempo(l)),
             "estado":   lambda l: str(l.get("estado", "")),
             "operador": lambda l: str(l.get("operador") or l.get("responsavel") or ""),
@@ -320,10 +320,14 @@ class HistoricoTab:
             # --- 5. ADICIONAR À TABELA ---
             # normalizar_tempo converte todos os formatos legacy para HH:MM
             tempo_mostrar = ProducaoService.normalizar_tempo(l)
-            # Compatibilidade legacy: "quantidade" era o nome antigo de "quantidade_consumida"
+            # Quantidade real quando a ordem já fechou; caso contrário a
+            # estimativa. Para SLS não existe campo direto de quantidade —
+            # estimar_quantidade deriva-a de altura_cuba/percentagem_po_novo,
+            # que é a mesma fonte que o CSV de auditoria já usava (antes o
+            # dashboard lia só os campos em bruto e mostrava 0.0 nesses casos).
             qtd_mostrar = (
                 l.get("quantidade_real") or
-                l.get("quantidade_consumida") or
+                ProducaoService.estimar_quantidade(l) or
                 l.get("quantidade") or
                 0.0
             )
