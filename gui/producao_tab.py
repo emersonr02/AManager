@@ -540,11 +540,12 @@ class ProducaoTab:
         # 3. GRAVAÇÃO DOS DADOS
         # ==========================================
         responsavel = os.environ.get("USERNAME", "Desconhecido")
-        quant = ""  # inicializado aqui para evitar UnboundLocalError se a lógica mudar
 
         campos_extra = {}
         if tech in ("FDM", "SLA"):
-            campos_extra["quantidade_consumida"] = quant
+            # Reler o campo aqui em vez de reaproveitar a variável 'quant' dos
+            # safety locks acima, para não depender de escopo entre blocos.
+            campos_extra["quantidade_consumida"] = self.ent_quant.get().strip()
             checklist = self.fdm_vars if tech == "FDM" else self.sla_vars
             campos_extra["checklist_seguranca"] = {k: v.get() for k, v in checklist.items()}
         elif tech == "SLS":
