@@ -32,11 +32,45 @@ def test_converter_para_horas():
     assert ProducaoService.converter_para_horas("01:30") == 1.5
     assert ProducaoService.converter_para_horas("00:00") == 0.0
     assert ProducaoService.converter_para_horas("invalido") == 0.0
+    assert ProducaoService.converter_para_horas("ab:cd") == 0.0
 
 
 def test_converter_para_string():
     assert ProducaoService.converter_para_string(1.5) == "01:30"
     assert ProducaoService.converter_para_string(0.0) == "00:00"
+
+
+def test_converter_para_string_arredonda_minutos_com_transporte_de_hora():
+    # 1.999h -> 59.94min arredonda para 60min, que deve transportar para a hora seguinte
+    assert ProducaoService.converter_para_string(1.999) == "02:00"
+
+
+@pytest.mark.parametrize("id_producao,esperado", [
+    (12, "PRD000012"),
+    ("12", "PRD000012"),
+    (0, "PRD000000"),
+    ("abc", "abc"),
+    (None, "None"),
+])
+def test_formatar_codigo(id_producao, esperado):
+    assert ProducaoService.formatar_codigo(id_producao) == esperado
+
+
+@pytest.mark.parametrize("codigo,esperado", [
+    ("PRD000012", 12),
+    ("12", 12),
+    (12, 12),
+    ("PRD-000-045", 45),
+    ("sem digitos", None),
+    ("", None),
+])
+def test_extrair_id(codigo, esperado):
+    assert ProducaoService.extrair_id(codigo) == esperado
+
+
+def test_formatar_codigo_e_extrair_id_sao_inversos():
+    codigo = ProducaoService.formatar_codigo(7)
+    assert ProducaoService.extrair_id(codigo) == 7
 
 
 def test_calcular_consumo_sls_usa_formula_oficial():
@@ -122,3 +156,15 @@ def test_remover_producao(arquivo_producoes):
     ProducaoService.remover_producao(p1["id"])
 
     assert ProducaoService.obter_todos() == []
+
+
+def test_obter_ultimo_lote_sls_sem_registos_devolve_vazio(arquivo_producoes):
+    assert ProducaoService.obter_ultimo_lote_sls() == ""
+
+
+def test_obter_ultimo_lote_sls_devolve_lote_mais_recente_preenchido(arquivo_producoes):
+    _criar(arquivo_producoes, tecnologia="SLS", campos_extra={"lote_po": "LOTE-A"})
+    _criar(arquivo_producoes, tecnologia="SLS", campos_extra={})
+    _criar(arquivo_producoes, tecnologia="SLS", campos_extra={"lote_po": "LOTE-C"})
+
+    assert ProducaoService.obter_ultimo_lote_sls() == "LOTE-C"

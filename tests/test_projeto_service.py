@@ -44,3 +44,19 @@ def test_normaliza_entradas_legadas_em_formato_de_string(arquivo_projetos):
     projetos = ProjetoService.obter_todos()
 
     assert projetos == [{"id": "257147", "nome": "PPS AquaFountain", "ativo": True}]
+
+
+def test_normaliza_entrada_legada_sem_separador_assume_nome_vazio(arquivo_projetos):
+    JSONManager.salvar(["257147"], arquivo_projetos)
+
+    projetos = ProjetoService.obter_todos()
+
+    assert projetos == [{"id": "257147", "nome": "", "ativo": True}]
+
+
+def test_atualizar_projeto_para_id_ja_existente_falha(arquivo_projetos):
+    ProjetoService.criar_projeto("111", "Projeto A")
+    ProjetoService.criar_projeto("222", "Projeto B")
+
+    with pytest.raises(ValueError):
+        ProjetoService.atualizar_projeto("111", "222", "Novo Nome")
