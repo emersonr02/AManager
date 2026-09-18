@@ -154,9 +154,14 @@ def json_file(tmp_path):
 
 def _aplicar_patches_gui(mp, base_dir):
     """Redireciona os ficheiros de dados usados diretamente pelos módulos de gui/
-    (que importam as constantes por nome, não pelo módulo config.paths)."""
-    from gui import pedidos_tab, historico_tab, producao_tab
-    from gui.dialogs import novo_pedido, editar_pedido, fechar_ordem
+    e services/ auxiliares que ainda importam as constantes por nome — a maior
+    parte dos tabs já foi centralizada para passar sempre pelos services
+    (PedidoService/MaquinaService/ProducaoService), e esses não precisam de
+    patch nenhum aqui: só quem ainda faz `from config.paths import ARQUIVO_X`
+    diretamente é que aparece nesta função."""
+    from gui.dialogs import editar_pedido
+    from gui import producao_tab
+    from services import backup_service, resumo_diario_service, audit_service
 
     caminhos = {
         "pedidos": base_dir / "pedidos.json",
@@ -167,19 +172,30 @@ def _aplicar_patches_gui(mp, base_dir):
     }
 
     mp.setattr(pedido_service, "ARQUIVO_PEDIDOS", str(caminhos["pedidos"]))
-    for modulo in (pedidos_tab, historico_tab, novo_pedido, editar_pedido, fechar_ordem):
-        mp.setattr(modulo, "ARQUIVO_PEDIDOS", str(caminhos["pedidos"]))
+    # editar_pedido.py é o único módulo de gui/ que ainda importa esta
+    # constante por nome — pedidos_tab/historico_tab/novo_pedido/fechar_ordem
+    # já passam todos por PedidoService.obter_todos().
+    mp.setattr(editar_pedido, "ARQUIVO_PEDIDOS", str(caminhos["pedidos"]))
 
     mp.setattr(producao_service, "ARQUIVO_LOGS", str(caminhos["producoes"]))
     mp.setattr(producao_tab, "ARQUIVO_LOGS", str(caminhos["producoes"]))
 
     mp.setattr(maquina_service, "ARQUIVO_MAQUINAS", str(caminhos["maquinas"]))
-    mp.setattr(producao_tab, "ARQUIVO_MAQUINAS", str(caminhos["maquinas"]))
 
     # manutencao_tab.py só fala com ManutencaoService (nunca importa estas constantes
     # por nome), por isso basta patchar o service — nenhum módulo de gui/ a mais aqui.
     mp.setattr(manutencao_service, "ARQUIVO_MANUTENCOES", str(caminhos["manutencoes"]))
     mp.setattr(manutencao_service, "ARQUIVO_TAREFAS_MANUTENCAO", str(caminhos["tarefas_manutencao"]))
+
+    # AppIndustrialI3D.__init__ arranca um backup automático numa thread e
+    # agenda o resumo diário logo na construção — sem isto, construir a app
+    # nos testes criaria um snapshot real em data/backups/ e um marcador em
+    # ~/.amanager/ na máquina de quem corre a suite.
+    pasta_backups = base_dir / "backups"
+    mp.setattr(backup_service, "DATA_DIR", str(base_dir))
+    mp.setattr(backup_service, "BACKUP_DIR", str(pasta_backups))
+    mp.setattr(resumo_diario_service.ResumoDiarioService, "_MARCADOR_DIR", str(base_dir / ".amanager"))
+    mp.setattr(audit_service, "ARQUIVO_AUDIT_LOG", str(base_dir / "audit_log.json"))
 
     return {k: str(v) for k, v in caminhos.items()}
 

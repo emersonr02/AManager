@@ -188,12 +188,12 @@ def test_processar_email_com_modelo_oficial_preenche_formulario(gui_arquivos, ar
 def test_processar_email_requerente_nunca_e_preenchido_automaticamente(gui_arquivos, arquivo_projetos, arquivo_materiais, ctk_root, avisos):
     ProjetoService.criar_projeto("257147", "PPS AquaFountain")
     win = JanelaNovoPedido(ctk_root, lambda: None)
-    win.cmb_req.set("alguem@x.com")
 
     exemplo = MODELO_EMAIL.split("Exemplo:\n\n", 1)[1].split("\n\nNotas:")[0]
     win.processar_texto_email(exemplo)
 
-    # REQUERENTE é sempre manual, mesmo estando no texto do email
+    # REQUERENTE é sempre manual — mesmo o email de exemplo tendo um campo
+    # "REQUERENTE:", o parser nunca o usa para preencher o combobox.
     assert win.cmb_req.get() == ""
 
 

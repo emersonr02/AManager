@@ -38,13 +38,26 @@ class ProducaoService:
 
     @staticmethod
     def converter_para_horas(hhmm: str) -> float:
-        """Converte string 'HH:MM' para float (ex: '01:30' -> 1.5)"""
+        """Converte tempo para float de horas.
+        Suporta todos os formatos legacy:
+          - 'HH:MM'             → formato padrão atual
+          - 'H:MM:SS'           → formato antigo com segundos
+          - 'N days, H:MM:SS'  → timedelta do Python (jobs > 24h)
+        """
         try:
-            partes = hhmm.split(':')
-            if len(partes) >= 2:
-                return int(partes[0]) + (int(partes[1]) / 60)
-            return 0.0
-        except ValueError:
+            s = str(hhmm).strip()
+            dias = 0
+            # "N days, H:MM:SS" — formato timedelta do Python
+            if 'day' in s:
+                partes_dia = s.split(', ', 1)
+                dias = int(partes_dia[0].split()[0])
+                s = partes_dia[1] if len(partes_dia) > 1 else "0:00"
+            partes = s.split(':')
+            h = int(partes[0])
+            m = int(partes[1]) if len(partes) > 1 else 0
+            # segundos ignorados na precisão de minutos
+            return dias * 24 + h + m / 60
+        except (ValueError, TypeError, IndexError):
             return 0.0
 
     @staticmethod
@@ -72,7 +85,23 @@ class ProducaoService:
         consumo_real_kg = peso_total_kg * perc_po_novo
         
         return round(consumo_real_kg, 4)
-    
+
+    @staticmethod
+    def estimar_quantidade(producao: dict) -> str:
+        """Quantidade estimada de uma produção, num formato pronto a mostrar.
+        Para SLS não há um campo direto — deriva-se de altura_cuba e
+        percentagem_po_novo pela mesma fórmula usada no fecho da ordem."""
+        if producao.get("tecnologia") == "SLS":
+            try:
+                altura = float(str(producao.get("altura_cuba", 0)).replace(",", "."))
+                perc = float(str(producao.get("percentagem_po_novo", 0)).replace(",", "."))
+                if perc > 1:
+                    perc = perc / 100
+                return f"{ProducaoService.calcular_consumo_sls(altura, perc):.2f}"
+            except ValueError:
+                return ""
+        return str(producao.get("quantidade_consumida", ""))
+
     @staticmethod
     def obter_ultimo_lote_sls():
         logs = JSONManager.carregar(ARQUIVO_LOGS)
@@ -156,8 +185,10 @@ class ProducaoService:
             novo["data_inicio"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             novo["estado"] = "Em Andamento"
             novo["erro"] = ""
-            novo.pop("tempo_real", None)
-            novo.pop("quantidade_real", None)
+            # Limpa todos os dados de fecho do original — o clone começa do zero
+            for campo in ("tempo_real", "quantidade_real", "verificado_por",
+                          "data_fecho", "nc_codigo", "controlo_qualidade"):
+                novo.pop(campo, None)
 
             producoes.append(novo)
             clone.update(novo)
@@ -165,6 +196,53 @@ class ProducaoService:
 
         JSONManager.atualizar(ARQUIVO_LOGS, _transformar)
         return clone or None
+
+    # Mapeamento de IDs legacy para nomes completos de maquinas
+    _LEGACY_MAQUINAS = {
+        "X1-1":    "Bambu Lab X1C #1",
+        "X1-2":    "Bambu Lab X1C #2",
+        "X1-3":    "Bambu Lab X1C #3",
+        "P1-1":    "Bambu Lab P1S #1",
+        "P1-2":    "Bambu Lab P1S #2",
+        "Form3L":  "Formlabs Form 3L",
+        "SLS-380": "3D Systems SLS 380",
+    }
+
+    @staticmethod
+    def normalizar_maquina(producao: dict, id_para_nome: dict = None) -> str:
+        """Resolve o nome completo da maquina de uma producao.
+        Ordem: campo 'maquina' (novo) -> lookup parque -> mapeamento legacy
+        -> id_maquina bruto. IDs numericos (sistema antigo) ficam assinalados."""
+        if id_para_nome is None:
+            id_para_nome = {}
+        nome = producao.get("maquina")
+        if nome:
+            return nome
+        mid = str(producao.get("id_maquina", ""))
+        if mid in id_para_nome:
+            return id_para_nome[mid]
+        if mid in ProducaoService._LEGACY_MAQUINAS:
+            return ProducaoService._LEGACY_MAQUINAS[mid]
+        if mid.isdigit():
+            return f"Desconhecida (ID antigo: {mid})"
+        return mid
+
+    @staticmethod
+    def normalizar_tempo(producao: dict) -> str:
+        """Devolve o tempo da producao normalizado para HH:MM.
+        Tenta: tempo_real > tempo_estimado > hora_maquina > tempo.
+        Converte formatos legacy ('H:MM:SS', 'N days, H:MM:SS') para HH:MM."""
+        raw = (
+            producao.get("tempo_real") or
+            producao.get("tempo_estimado") or
+            producao.get("hora_maquina") or
+            producao.get("tempo") or
+            ""
+        )
+        if not raw:
+            return "00:00"
+        horas = ProducaoService.converter_para_horas(str(raw))
+        return ProducaoService.converter_para_string(horas)
 
     @staticmethod
     def remover_producao(id_producao):

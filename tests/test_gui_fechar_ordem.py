@@ -208,5 +208,6 @@ def test_on_nc_selecionada_mostra_acoes_corretivas_sugeridas(gui_arquivos, arqui
 
     win.on_nc_selecionada("COD001 - Obstrução do bico")
 
-    assert "Limpar o bico" in win.lbl_acoes_nc.cget("text")
+    checkboxes = win.frm_acoes_check.winfo_children()
+    assert any(c.cget("text") == "Limpar o bico" for c in checkboxes)
     win.destroy()

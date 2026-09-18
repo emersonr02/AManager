@@ -5,7 +5,10 @@ import os
 from database.json_manager import JSONManager
 from services.pedido_service import PedidoService
 from services.producao_service import ProducaoService
-from config.paths import ARQUIVO_LOGS, ARQUIVO_MAQUINAS
+from config.paths import ARQUIVO_LOGS
+from services.maquina_service import MaquinaService
+from services.template_service import TemplateService
+from services.nc_service import NCService
 from gui import theme
 
 class ProducaoTab:
@@ -33,18 +36,33 @@ class ProducaoTab:
 
         frm = ctk.CTkFrame(self.parent, fg_color=theme.SURFACE, corner_radius=theme.RADIUS_M, border_width=1, border_color=theme.BORDER)
         frm.pack(fill="both", expand=True, padx=24, pady=(0, 18))
-        frm.columnconfigure(1, weight=1)
+        frm.columnconfigure(1, weight=0)
+        frm.columnconfigure(2, weight=1)
 
         # 0. Tecnologia AM
         self._lbl_campo(frm, "Tecnologia AM", 0)
         self.cmb_tech = theme.combobox(frm, values=["FDM", "SLA", "SLS"], width=250, font=self.f_padrao, state="readonly", command=self.ao_mudar_tecnologia)
         self.cmb_tech.grid(row=0, column=1, padx=15, pady=10, sticky="w")
 
+        # 0.5. Templates de produção — atalho para preencher os campos de um job recorrente
+        self._lbl_campo(frm, "Usar Template", 1)
+        frm_template = ctk.CTkFrame(frm, fg_color="transparent")
+        frm_template.grid(row=1, column=1, columnspan=2, padx=15, pady=(0, 5), sticky="ew")
+
+        self.cmb_template = theme.combobox(frm_template, values=["Nenhum"], width=280,
+                                           font=self.f_padrao, state="readonly",
+                                           command=self.aplicar_template)
+        self.cmb_template.set("Nenhum")
+        self.cmb_template.pack(side="left")
+
+        theme.button_ghost(frm_template, text="💾 Guardar como Template", width=190,
+                           command=self.abrir_guardar_template).pack(side="left", padx=(10, 0))
+
         # 1. Vincular Pedidos Abertos (N:N)
-        self._lbl_campo(frm, "Vincular Pedido(s)", 1)
+        self._lbl_campo(frm, "Vincular Pedido(s)", 2)
 
         frm_pedidos_vinc = ctk.CTkFrame(frm, fg_color="transparent")
-        frm_pedidos_vinc.grid(row=1, column=1, columnspan=2, padx=15, pady=10, sticky="ew")
+        frm_pedidos_vinc.grid(row=2, column=1, columnspan=2, padx=15, pady=10, sticky="ew")
 
         self.ent_pedidos_sel = theme.entry(frm_pedidos_vinc, font=self.f_padrao)
         self.ent_pedidos_sel.insert(0, "Nenhum pedido selecionado")
@@ -54,14 +72,22 @@ class ProducaoTab:
         theme.button_ghost(frm_pedidos_vinc, text="📋 Selecionar Pedidos", width=160, command=self.abrir_pop_up_selecao_pedidos).pack(side="right")
 
         # 2. Máquina Destino
-        self._lbl_campo(frm, "Máquina Destino", 2)
-        self.cmb_maq = theme.combobox(frm, values=["A carregar..."], width=250, font=self.f_padrao, state="readonly")
-        self.cmb_maq.grid(row=2, column=1, padx=15, pady=10, sticky="w")
+        self._lbl_campo(frm, "Máquina Destino", 3)
+        self.cmb_maq = theme.combobox(frm, values=["A carregar..."], width=250, font=self.f_padrao,
+                                      state="readonly", command=self.ao_selecionar_maquina)
+        self.cmb_maq.grid(row=3, column=1, padx=15, pady=10, sticky="w")
+
+        # Alerta de NC recorrente — some por baixo do seletor de máquina
+        # apenas quando há um problema não resolvido nessa máquina.
+        self.lbl_alerta_recorrencia = ctk.CTkLabel(
+            frm, text="", font=theme.font_body(10, "bold"), text_color=theme.WARNING,
+            justify="left", wraplength=500)
+        self.lbl_alerta_recorrencia.grid(row=3, column=2, padx=(0, 15), pady=10, sticky="w")
 
         # 3. Tempo Máquina
-        self._lbl_campo(frm, "Tempo Máquina (HH:MM)", 3)
+        self._lbl_campo(frm, "Tempo Máquina (HH:MM)", 4)
         self.ent_tempo = theme.entry(frm, placeholder_text="02:30", font=theme.font_mono(13), width=250)
-        self.ent_tempo.grid(row=3, column=1, padx=15, pady=10, sticky="w")
+        self.ent_tempo.grid(row=4, column=1, padx=15, pady=10, sticky="w")
         self.ent_tempo.bind("<KeyRelease>", lambda e: self.mascara_tempo(e, self.ent_tempo))
 
         # --- CAMPOS DINÂMICOS DE CONSUMO ---
@@ -138,21 +164,116 @@ class ProducaoTab:
         # Botão Guardar
         self.btn_salvar = theme.button_action(frm, text="🚀 INICIAR FABRICO", height=45, font=self.f_titulo, command=self.gravar_producao)
 
+    def ao_selecionar_maquina(self, nome_maquina: str):
+        """Verifica recorrência de NC não resolvida na máquina escolhida e
+        mostra um aviso inline — não bloqueia, apenas chama a atenção antes
+        de lançar mais uma produção sobre um problema conhecido."""
+        if not nome_maquina or nome_maquina.startswith(("Sem ", "Erro", "A carregar")):
+            self.lbl_alerta_recorrencia.configure(text="")
+            return
+
+        id_para_nome = MaquinaService.obter_lookup_id_nome()
+        recorrencias = NCService.detectar_recorrencia(nome_maquina, id_para_nome)
+
+        if recorrencias:
+            msg = NCService.formatar_alerta_recorrencia(recorrencias)
+            self.lbl_alerta_recorrencia.configure(
+                text=f"⚠️ Problema recorrente nesta máquina:\n{msg}")
+        else:
+            self.lbl_alerta_recorrencia.configure(text="")
+
     def preencher_lote_anterior(self):
         if self.chk_var_lote.get():
-            if os.path.exists(ARQUIVO_LOGS):
-                producoes = JSONManager.carregar(ARQUIVO_LOGS)
-                lotes_sls = [p.get("lote_po") for p in producoes if p.get("tecnologia") == "SLS" and p.get("lote_po")]
-                
-                if lotes_sls:
-                    self.ent_lote.delete(0, 'end')
-                    self.ent_lote.insert(0, lotes_sls[-1])
-                    return
-            
-            self.chk_var_lote.set(False)
-            messagebox.showinfo("Info", "Nenhum registo de lote de pó anterior encontrado.")
+            lote = ProducaoService.obter_ultimo_lote_sls()
+            if lote:
+                self.ent_lote.delete(0, 'end')
+                self.ent_lote.insert(0, lote)
+            else:
+                self.chk_var_lote.set(False)
+                messagebox.showinfo("Info", "Nenhum registo de lote de pó anterior encontrado.")
         else:
             self.ent_lote.delete(0, 'end')
+
+    def _atualizar_lista_templates(self, tecnologia: str):
+        """Atualiza o combobox de templates para a tecnologia selecionada."""
+        templates = TemplateService.obter_por_tecnologia(tecnologia)
+        # Ordena por popularidade (mais usados primeiro)
+        templates = sorted(templates, key=lambda t: -t.get("uso_count", 0))
+        self._templates_cache = {t["nome"]: t for t in templates}
+        valores = ["Nenhum"] + list(self._templates_cache.keys())
+        self.cmb_template.configure(values=valores)
+        self.cmb_template.set("Nenhum")
+
+    def aplicar_template(self, nome_escolhido: str):
+        """Pré-preenche o formulário com os valores guardados no template."""
+        if nome_escolhido == "Nenhum" or nome_escolhido not in getattr(self, "_templates_cache", {}):
+            return
+        t = self._templates_cache[nome_escolhido]
+
+        # Máquina — só aplica se ainda estiver na lista de compatíveis
+        if t.get("id_maquina") in self.cmb_maq.cget("values"):
+            self.cmb_maq.set(t["id_maquina"])
+
+        if t.get("tempo_estimado"):
+            self.ent_tempo.delete(0, "end")
+            self.ent_tempo.insert(0, t["tempo_estimado"])
+
+        tech = t.get("tecnologia", "")
+        if tech == "SLS":
+            if t.get("altura_cuba"):
+                self.ent_altura.delete(0, "end")
+                self.ent_altura.insert(0, t["altura_cuba"])
+            if t.get("percentagem_po"):
+                self.ent_perc.delete(0, "end")
+                self.ent_perc.insert(0, t["percentagem_po"])
+        else:
+            if t.get("material") and hasattr(self, "ent_quant"):
+                pass  # quantidade é sempre específica do job, não vem do template
+
+        TemplateService.registar_uso(t["id"])
+        messagebox.showinfo("Template Aplicado",
+            f"Parâmetros de \"{nome_escolhido}\" aplicados.\nAjusta a quantidade/tempo se necessário.")
+
+    def abrir_guardar_template(self):
+        """Popup simples para nomear e guardar os valores atuais como template."""
+        tech_atual = self.cmb_tech.get()
+        maq_atual = self.cmb_maq.get()
+
+        if not maq_atual or maq_atual == "A carregar...":
+            messagebox.showwarning("Aviso", "Seleciona uma máquina antes de guardar o template.")
+            return
+
+        popup = ctk.CTkToplevel(self.parent.winfo_toplevel())
+        popup.title("Guardar Template")
+        popup.geometry("400x180")
+        popup.transient(self.parent.winfo_toplevel())
+        popup.grab_set()
+
+        ctk.CTkLabel(popup, text="Nome do Template", font=theme.font_eyebrow(11),
+                     text_color=theme.TEXT_MUTED).pack(padx=20, pady=(20, 5), anchor="w")
+        ent_nome = theme.entry(popup, font=self.f_padrao, width=340,
+                               placeholder_text=f"Ex: {tech_atual} Padrão - {maq_atual}")
+        ent_nome.pack(padx=20, pady=(0, 15))
+
+        def _guardar():
+            nome = ent_nome.get().strip()
+            if not nome:
+                messagebox.showwarning("Aviso", "Indica um nome para o template.")
+                return
+            TemplateService.criar_template(
+                nome=nome,
+                tecnologia=tech_atual,
+                id_maquina=maq_atual,
+                tempo_estimado=self.ent_tempo.get().strip(),
+                altura_cuba=self.ent_altura.get().strip() if tech_atual == "SLS" else "",
+                percentagem_po=self.ent_perc.get().strip() if tech_atual == "SLS" else "",
+            )
+            self._atualizar_lista_templates(tech_atual)
+            popup.destroy()
+            messagebox.showinfo("Sucesso", f"Template \"{nome}\" guardado.")
+
+        theme.button_action(popup, text="Guardar", command=_guardar, height=36).pack(
+            padx=20, pady=5, fill="x")
 
     def ao_mudar_tecnologia(self, escolha=None):
         # Usa o valor recebido quando disponível: no arranque, self.cmb_tech ainda não
@@ -166,6 +287,9 @@ class ProducaoTab:
         self.ent_pedidos_sel.delete(0, "end")
         self.ent_pedidos_sel.insert(0, "Nenhum pedido selecionado")
         self.ent_pedidos_sel.configure(state="readonly")
+
+        # 1.5. Atualiza a lista de templates disponíveis para esta tecnologia
+        self._atualizar_lista_templates(tech_atual)
 
         # 2. Esconde tudo
         self.lbl_quant.grid_forget()
@@ -181,50 +305,46 @@ class ProducaoTab:
 
         # 3. Mostra consoante a tecnologia
         if tech_atual == "FDM":
-            self.lbl_quant.grid(row=4, column=0, padx=15, pady=10, sticky="e")
-            self.ent_quant.grid(row=4, column=1, padx=15, pady=10, sticky="w")
-            self.frm_fdm_checklist.grid(row=5, column=0, columnspan=3, padx=15, pady=10, sticky="ew")
-            self.btn_salvar.grid(row=6, column=0, columnspan=3, padx=15, pady=20, sticky="ew")
+            self.lbl_quant.grid(row=5, column=0, padx=15, pady=10, sticky="e")
+            self.ent_quant.grid(row=5, column=1, padx=15, pady=10, sticky="w")
+            self.frm_fdm_checklist.grid(row=6, column=0, columnspan=3, padx=15, pady=10, sticky="ew")
+            self.btn_salvar.grid(row=7, column=0, columnspan=3, padx=15, pady=20, sticky="ew")
             
         elif tech_atual == "SLA":
-            self.lbl_quant.grid(row=4, column=0, padx=15, pady=10, sticky="e")
-            self.ent_quant.grid(row=4, column=1, padx=15, pady=10, sticky="w")
-            self.frm_sla_checklist.grid(row=5, column=0, columnspan=3, padx=15, pady=10, sticky="ew")
-            self.btn_salvar.grid(row=6, column=0, columnspan=3, padx=15, pady=20, sticky="ew")
+            self.lbl_quant.grid(row=5, column=0, padx=15, pady=10, sticky="e")
+            self.ent_quant.grid(row=5, column=1, padx=15, pady=10, sticky="w")
+            self.frm_sla_checklist.grid(row=6, column=0, columnspan=3, padx=15, pady=10, sticky="ew")
+            self.btn_salvar.grid(row=7, column=0, columnspan=3, padx=15, pady=20, sticky="ew")
             
         elif tech_atual == "SLS":
-            self.lbl_altura.grid(row=4, column=0, padx=15, pady=10, sticky="e")
-            self.ent_altura.grid(row=4, column=1, padx=15, pady=10, sticky="w")
-            self.lbl_perc.grid(row=5, column=0, padx=15, pady=10, sticky="e")
-            self.ent_perc.grid(row=5, column=1, padx=15, pady=10, sticky="w")
-            self.frm_sls_checklist.grid(row=6, column=0, columnspan=3, padx=15, pady=10, sticky="ew")
-            self.btn_salvar.grid(row=7, column=0, columnspan=3, padx=15, pady=20, sticky="ew")
+            self.lbl_altura.grid(row=5, column=0, padx=15, pady=10, sticky="e")
+            self.ent_altura.grid(row=5, column=1, padx=15, pady=10, sticky="w")
+            self.lbl_perc.grid(row=6, column=0, padx=15, pady=10, sticky="e")
+            self.ent_perc.grid(row=6, column=1, padx=15, pady=10, sticky="w")
+            self.frm_sls_checklist.grid(row=7, column=0, columnspan=3, padx=15, pady=10, sticky="ew")
+            self.btn_salvar.grid(row=8, column=0, columnspan=3, padx=15, pady=20, sticky="ew")
 
         # 4. Atualiza as máquinas
         self.atualizar_combos()
 
     def atualizar_combos(self):
         if not hasattr(self, 'cmb_maq'): return
-        
-        tech_atual = self.cmb_tech.get()
-        caminho_final = ARQUIVO_MAQUINAS
 
-        if not os.path.exists(caminho_final):
-            self.cmb_maq.configure(values=["Ficheiro parque_maquinas.json não encontrado"])
-            self.cmb_maq.set("Sem dados")
-            return
+        tech_atual = self.cmb_tech.get()
 
         try:
-            impressoras = JSONManager.carregar(caminho_final)
+            impressoras = MaquinaService.obter_todas()
             maquinas_compativeis = []
-            
+
             for imp in impressoras:
                 if isinstance(imp, dict):
                     t = imp.get("tech", tech_atual)
                     nome = imp.get("nome", "Desconhecida")
                     st = imp.get("estado", "Ativa")
                     
-                    if t == tech_atual and st not in ["Inativa", "Manutenção"]:
+                    st_lower = st.lower()
+                    inativa = "inativa" in st_lower or "manutenção" in st_lower or "manutencao" in st_lower
+                    if t == tech_atual and not inativa:
                         maquinas_compativeis.append(nome)
                 elif isinstance(imp, str):
                     maquinas_compativeis.append(imp)
@@ -232,10 +352,12 @@ class ProducaoTab:
             if maquinas_compativeis:
                 self.cmb_maq.configure(values=maquinas_compativeis)
                 self.cmb_maq.set(maquinas_compativeis[0])
+                self.ao_selecionar_maquina(maquinas_compativeis[0])
             else:
                 self.cmb_maq.configure(values=[f"Sem máquinas p/ {tech_atual}"])
                 self.cmb_maq.set(f"Sem p/ {tech_atual}")
-                
+                self.lbl_alerta_recorrencia.configure(text="")
+
         except Exception as e:
             self.cmb_maq.configure(values=["Erro ao ler ficheiro"])
             self.cmb_maq.set("Erro")
@@ -357,6 +479,20 @@ class ProducaoTab:
             messagebox.showwarning("Aviso", "Selecione uma máquina válida antes de iniciar o fabrico.")
             return
 
+        # Aviso de qualidade: problema recorrente sem correção confirmada
+        # nesta máquina. Não bloqueia — o operador pode decidir prosseguir
+        # (ex: causa já identificada mas correção agendada para depois).
+        id_para_nome = MaquinaService.obter_lookup_id_nome()
+        recorrencias = NCService.detectar_recorrencia(maq, id_para_nome)
+        if recorrencias:
+            msg = NCService.formatar_alerta_recorrencia(recorrencias)
+            if not messagebox.askyesno(
+                "Problema Recorrente Detetado",
+                f"Esta máquina teve não-conformidades repetidas sem correção confirmada:\n\n{msg}\n\n"
+                "Desejas iniciar esta produção mesmo assim?"
+            ):
+                return
+
         # ==========================================
         # 2. SAFETY LOCKS (TRAVAS DE SEGURANÇA)
         # ==========================================
@@ -403,13 +539,13 @@ class ProducaoTab:
         # ==========================================
         # 3. GRAVAÇÃO DOS DADOS
         # ==========================================
-        # Vai buscar o utilizador com sessão iniciada no domínio (ex: "emerson.ribeiro"),
-        # em vez de um valor genérico fixo — fica registado quem lançou a produção.
         responsavel = os.environ.get("USERNAME", "Desconhecido")
 
         campos_extra = {}
         if tech in ("FDM", "SLA"):
-            campos_extra["quantidade_consumida"] = quant
+            # Reler o campo aqui em vez de reaproveitar a variável 'quant' dos
+            # safety locks acima, para não depender de escopo entre blocos.
+            campos_extra["quantidade_consumida"] = self.ent_quant.get().strip()
             checklist = self.fdm_vars if tech == "FDM" else self.sla_vars
             campos_extra["checklist_seguranca"] = {k: v.get() for k, v in checklist.items()}
         elif tech == "SLS":
@@ -437,10 +573,10 @@ class ProducaoTab:
         
         self.ao_mudar_tecnologia(tech)
         self.ent_tempo.delete(0, 'end')
-        if hasattr(self, 'ent_quant'): self.ent_quant.delete(0, 'end')
-        if hasattr(self, 'ent_altura'): self.ent_altura.delete(0, 'end')
-        if hasattr(self, 'ent_perc'): self.ent_perc.delete(0, 'end')
-        if hasattr(self, 'ent_lote'): self.ent_lote.delete(0, 'end')
+        self.ent_quant.delete(0, 'end')
+        self.ent_altura.delete(0, 'end')
+        self.ent_perc.delete(0, 'end')
+        self.ent_lote.delete(0, 'end')
         
         for chk_var in self.fdm_vars.values(): chk_var.set(False)
         for chk_var in self.sla_vars.values(): chk_var.set(False)

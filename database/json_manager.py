@@ -21,7 +21,7 @@ class JSONManager:
                         os.remove(lock_file)  # Quebra lock preso (ex: processo morreu a meio)
                     except OSError:
                         pass
-                    continue
+                    start_time = time.time()  # Reinicia o timer para evitar loop de roubo imediato
                 time.sleep(0.1)
 
     @staticmethod

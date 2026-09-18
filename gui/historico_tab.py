@@ -4,9 +4,10 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import os
 
-from config.paths import ARQUIVO_PEDIDOS
+from services.maquina_service import MaquinaService
 from database.json_manager import JSONManager
 from services.producao_service import ProducaoService
+from services.pedido_service import PedidoService
 from services.export_service import ExportService
 from services.manutencao_service import ManutencaoService
 from gui.dialogs.fechar_ordem import JanelaFecharOrdem
@@ -92,12 +93,13 @@ class HistoricoTab:
         frm_conteudo = ctk.CTkFrame(self.parent, fg_color=theme.SURFACE, corner_radius=theme.RADIUS_M, border_width=1, border_color=theme.BORDER)
         frm_conteudo.pack(fill="both", expand=True, padx=24, pady=5)
 
-        cols = ("id", "data", "projeto", "maquina", "material", "qnt", "tempo", "estado")
-        anchors = {"id": "center", "data": "center", "projeto": "w", "maquina": "w", "material": "w", "qnt": "center", "tempo": "center", "estado": "w"}
+        cols = ("id", "data", "projeto", "maquina", "material", "qnt", "tempo", "estado", "operador", "verificado")
+        anchors = {"id": "center", "data": "center", "projeto": "w", "maquina": "w", "material": "w", "qnt": "center", "tempo": "center", "estado": "w", "operador": "w", "verificado": "w"}
         self.tab_tree = ttk.Treeview(frm_conteudo, columns=cols, show="headings", style="Dashboard.Treeview")
         for c in cols:
             self.tab_tree.heading(c, text=c.upper(), anchor=anchors[c])
-
+        self.tab_tree.heading("operador", text="INICIADO POR")
+        self.tab_tree.heading("verificado", text="VERIFICADO POR")
 
         self.tab_tree.column("id", width=95, anchor="center")
         self.tab_tree.column("data", width=90, anchor="center")
@@ -107,23 +109,31 @@ class HistoricoTab:
         self.tab_tree.column("qnt", width=70, anchor="center")
         self.tab_tree.column("tempo", width=70, anchor="center")
         self.tab_tree.column("estado", width=130, anchor="w")
+        self.tab_tree.column("operador", width=110, anchor="w")
+        self.tab_tree.column("verificado", width=110, anchor="w")
 
         self.tab_tree.bind("<Double-1>", self.abrir_tratamento_ordem)
+
+        # Ordenação por coluna — clique no cabeçalho inverte a ordem
+        self._sort_col   = "data"   # coluna actualmente ordenada
+        self._sort_asc   = False    # False = mais recente primeiro (padrão)
+        _COL_IDX = {"id":0,"data":1,"projeto":2,"maquina":3,"material":4,
+                    "qnt":5,"tempo":6,"estado":7,"operador":8,"verificado":9}
+        for col in ("id","data","projeto","maquina","material","qnt","tempo","estado","operador","verificado"):
+            self.tab_tree.heading(col, command=lambda c=col: self._ordenar_por(c))
 
         sb = ttk.Scrollbar(frm_conteudo, orient="vertical", command=self.tab_tree.yview)
         self.tab_tree.configure(yscrollcommand=sb.set)
         sb.pack(fill="y", side="right", pady=10, padx=(0, 5))
         self.tab_tree.pack(fill="both", expand=True, side="left", padx=10, pady=10)
 
-        # Criado depois da scrollbar: precisa de "envolver" o yscrollcommand já
-        # ligado ao sb.set, para saber repor as pills sempre que a vista faz scroll.
-        self.estado_pills = theme.TreeviewPillColumn(self.tab_tree, "estado")
-
         # 5. BARRA DE AÇÕES INFERIOR
         frm_acoes = ctk.CTkFrame(self.parent, fg_color="transparent")
         frm_acoes.pack(fill="x", padx=24, pady=(5, 18))
 
         theme.button_ghost(frm_acoes, text="Clonar Ordem", height=35, command=self.clonar_log).pack(side="left", padx=5)
+        theme.button_ghost(frm_acoes, text="📄 Gerar PDF", height=35, command=self.gerar_pdf_ordem).pack(side="left", padx=5)
+        theme.button_ghost(frm_acoes, text="📋 Resumo do Dia", height=35, command=self.gerar_resumo_diario).pack(side="left", padx=5)
         theme.button_primary(frm_acoes, text="Exportar Dados (CSV)", height=35, command=self.exportar_csv).pack(side="left", padx=5)
         theme.button_danger(frm_acoes, text="Apagar Registo", height=35, command=self.remover_log).pack(side="right", padx=5)
 
@@ -136,9 +146,22 @@ class HistoricoTab:
         style.configure("Dashboard.Treeview.Heading", background=theme.SURFACE_ALT[0], foreground=theme.TEXT_MUTED[0], borderwidth=0, rowheight=35)
         style.map("Dashboard.Treeview", background=[("selected", theme.ACCENT[0])], foreground=[("selected", "white")])
 
+        # Tags nativas do Treeview para colorir o texto da linha por estado
+        # (substituem as pills flutuantes que desalinhavam noutros monitores/escalas)
+        self.tab_tree.tag_configure("tag_ok",      foreground=theme.SUCCESS[0])
+        self.tab_tree.tag_configure("tag_run",     foreground=theme.TEAL[0])
+        self.tab_tree.tag_configure("tag_bad",     foreground=theme.CRITICAL[0])
+        self.tab_tree.tag_configure("tag_neutral", foreground=theme.TEXT_MUTED[0])
+
     def carregar_combos_filtro(self):
         logs = ProducaoService.obter_todos()
-        maquinas = ["Todas"] + sorted(list(set(l.get("maquina", "") for l in logs if l.get("maquina"))))
+        _id_para_nome_combo = MaquinaService.obter_lookup_id_nome()
+        nomes_maquinas = set()
+        for l in logs:
+            nome = ProducaoService.normalizar_maquina(l, _id_para_nome_combo)
+            if nome and not nome.startswith("Desconhecida"):
+                nomes_maquinas.add(nome)
+        maquinas = ["Todas"] + sorted(nomes_maquinas)
         self.flt_maq.configure(values=maquinas)
         self.flt_maq.set("Todas")
 
@@ -174,85 +197,172 @@ class HistoricoTab:
         except ValueError:
             return None
 
-    def atualizar_tabela(self):
-        for i in self.tab_tree.get_children(): 
-            self.tab_tree.delete(i)
-        
-        proj_q = self.flt_p.get().lower()
-        mat_q = self.flt_m.get().lower()
-        cod_q = self.flt_cod.get().lower()
-        maq_q = self.flt_maq.get()
-        est_q = self.flt_estado.get()
-        
-        d_ini = self.parse_data_segura(self.flt_data_ini.get())
-        d_fim = self.parse_data_segura(self.flt_data_fim.get())
+    def _ordenar_por(self, coluna: str):
+        """Inverte a ordenação se a mesma coluna; caso contrário ordena pela nova."""
+        if self._sort_col == coluna:
+            self._sort_asc = not self._sort_asc
+        else:
+            self._sort_col = coluna
+            self._sort_asc = True
+        # Atualiza símbolo ↑↓ no cabeçalho
+        _LABELS = {"id":"ID","data":"DATA","projeto":"PROJETO","maquina":"MAQUINA",
+                   "material":"MATERIAL","qnt":"QNT","tempo":"TEMPO","estado":"ESTADO",
+                   "operador":"INICIADO POR","verificado":"VERIFICADO POR"}
+        for c, lbl in _LABELS.items():
+            seta = (" ↑" if self._sort_asc else " ↓") if c == coluna else ""
+            self.tab_tree.heading(c, text=lbl + seta)
+        self.atualizar_tabela()
 
-        total_filtradas = 0
-        sucesso_pecas = 0
-        pecas_finalizadas = 0
+    # ------------------------------------------------------------------ #
+    #  HELPERS PRIVADOS                                                    #
+    # ------------------------------------------------------------------ #
+
+    def _resolver_projeto_material(self, log: dict, pedidos_db: list) -> tuple[str, str]:
+        """Devolve (projeto_final, material_final) para uma linha de produção,
+        com suporte completo a dados legacy."""
+        vinculos_raw = log.get("pedidos_vinculados", [])
+        if isinstance(vinculos_raw, list) and vinculos_raw:
+            vinculos_int = set()
+            for v in vinculos_raw:
+                try:
+                    vinculos_int.add(int(v))
+                except (TypeError, ValueError):
+                    pass
+            projetos_set, materiais_set = set(), set()
+            for p in pedidos_db:
+                try:
+                    pid = int(p.get("id", -1))
+                except (TypeError, ValueError):
+                    pid = -1
+                if pid in vinculos_int:
+                    nr  = p.get("nr_projeto", "")
+                    nom = p.get("nome_projeto", "")
+                    proj_str = f"{nr} - {nom}" if nom else str(nr)
+                    if proj_str:
+                        projetos_set.add(proj_str)
+                    for peca in p.get("pecas", []):
+                        if peca.get("material"):
+                            materiais_set.add(peca["material"])
+            return (
+                " | ".join(projetos_set) if projetos_set else "Sem Projeto",
+                " | ".join(materiais_set) if materiais_set else "N/A",
+            )
+        # Legacy
+        projeto = str(log.get("nr_projeto") or log.get("projeto") or log.get("projeto_nr") or "")
+        nome_leg = log.get("nome_projeto", "")
+        if projeto and nome_leg:
+            projeto = f"{projeto} - {nome_leg}"
+        material = str(log.get("material") or log.get("material_tipo") or log.get("filamento") or "")
+        return projeto, material
+
+    def _passa_filtros(self, log: dict, projeto: str, material: str,
+                       filtros: dict, id_para_nome: dict) -> bool:
+        """Verifica se uma linha passa em todos os filtros activos."""
+        if filtros["proj"] and filtros["proj"] not in projeto.lower():
+            return False
+        if filtros["mat"] and filtros["mat"] not in material.lower():
+            return False
+        if filtros["cod"] and filtros["cod"] not in str(log.get("erro", "")).lower():
+            return False
+        maquina = ProducaoService.normalizar_maquina(log, id_para_nome)
+        if filtros["maq"] != "Todas" and maquina != filtros["maq"]:
+            return False
+        estado = log.get("estado", "Em Andamento")
+        if estado == "Falha":      estado = "Cancelada"
+        if estado == "A Imprimir": estado = "Em Andamento"
+        if filtros["est"] != "Todos" and estado != filtros["est"]:
+            return False
+        log_data = self.parse_data_segura(log.get("data_inicio", ""))
+        if log_data:
+            if filtros["d_ini"] and log_data < filtros["d_ini"]:
+                return False
+            if filtros["d_fim"] and log_data > filtros["d_fim"]:
+                return False
+        return True
+
+    # ------------------------------------------------------------------ #
+    #  TABELA PRINCIPAL                                                    #
+    # ------------------------------------------------------------------ #
+
+    def atualizar_tabela(self):
+        for i in self.tab_tree.get_children():
+            self.tab_tree.delete(i)
+
+        filtros = {
+            "proj":  self.flt_p.get().lower(),
+            "mat":   self.flt_m.get().lower(),
+            "cod":   self.flt_cod.get().lower(),
+            "maq":   self.flt_maq.get(),
+            "est":   self.flt_estado.get(),
+            "d_ini": self.parse_data_segura(self.flt_data_ini.get()),
+            "d_fim": self.parse_data_segura(self.flt_data_fim.get()),
+        }
+
+        logs       = ProducaoService.obter_todos()
+        pedidos_db = PedidoService.obter_todos()
+        _id_para_nome = MaquinaService.obter_lookup_id_nome()
+
+        total_filtradas = sucesso_pecas = pecas_finalizadas = 0
         total_horas = 0.0
 
-        logs = ProducaoService.obter_todos()
-        pedidos_db = JSONManager.carregar(ARQUIVO_PEDIDOS) if os.path.exists(ARQUIVO_PEDIDOS) else []
-
-        pill_dados = {}
+        # Ordena os logs antes de iterar, para que a inserção na tabela
+        # já respeite a ordem pretendida pelo utilizador.
+        _COL_KEY = {
+            "id":       lambda l: int(l.get("id", 0)),
+            "data":     lambda l: str(l.get("data_inicio", "")),
+            "projeto":  lambda l: str(l.get("nr_projeto", "")),
+            "maquina":  lambda l: ProducaoService.normalizar_maquina(l, _id_para_nome),
+            "material": lambda l: str(l.get("material", "")),
+            "qnt":      lambda l: float(str(l.get("quantidade_real") or ProducaoService.estimar_quantidade(l) or l.get("quantidade") or 0).replace(",",".")),
+            "tempo":    lambda l: ProducaoService.converter_para_horas(ProducaoService.normalizar_tempo(l)),
+            "estado":   lambda l: str(l.get("estado", "")),
+            "operador": lambda l: str(l.get("operador") or l.get("responsavel") or ""),
+            "verificado":lambda l: str(l.get("verificado_por", "")),
+        }
+        key_fn = _COL_KEY.get(self._sort_col, _COL_KEY["data"])
+        logs = sorted(logs, key=lambda l: key_fn(l), reverse=not self._sort_asc)
 
         for l in logs:
-            # --- 1. INTEGRAÇÃO N:N (PROJETO E MATERIAL) ---
-            if "pedidos_vinculados" in l and isinstance(l["pedidos_vinculados"], list) and l["pedidos_vinculados"]:
-                vinculos = l["pedidos_vinculados"]
-                projetos_set = set()
-                materiais_set = set()
+            projeto_final, material_final = self._resolver_projeto_material(l, pedidos_db)
 
-                for p in pedidos_db:
-                    if p.get("id") in vinculos:
-                        nr_proj = p.get("nr_projeto", "")
-                        nome_proj = p.get("nome_projeto", "")
-                        proj_str = f"{nr_proj} - {nome_proj}" if nome_proj else str(nr_proj)
-                        if proj_str: projetos_set.add(proj_str)
+            if not self._passa_filtros(l, projeto_final, material_final, filtros, _id_para_nome):
+                continue
 
-                        for peca in p.get("pecas", []):
-                            if peca.get("material"): materiais_set.add(peca["material"])
-
-                projeto_final = " | ".join(projetos_set) if projetos_set else "Sem Projeto"
-                material_final = " | ".join(materiais_set) if materiais_set else "N/A"
-            else:
-                projeto_final = str(l.get("nr_projeto", ""))
-                material_final = str(l.get("material", ""))
-
-            # --- 2. FILTROS DE TEXTO ---
-            if proj_q and proj_q not in projeto_final.lower(): continue
-            if mat_q and mat_q not in material_final.lower(): continue
-            if cod_q and cod_q not in str(l.get("erro", "")).lower(): continue
-            
-            # --- 3. FILTROS DE COMBOBOX E ESTADO ---
-            maquina_log = l.get("maquina", "")
-            if maq_q != "Todas" and maquina_log != maq_q: continue
-
-            estado_log = l.get("estado", "Em Andamento")
-            if estado_log == "Falha": estado_log = "Cancelada"
-            if estado_log == "A Imprimir": estado_log = "Em Andamento" # Uniformizar filtros
-            if est_q != "Todos" and estado_log != est_q: continue
-
-            # --- 4. FILTROS DE DATA ---
+            # ── Campos para exibição ──────────────────────────────────────
+            maquina_log  = ProducaoService.normalizar_maquina(l, _id_para_nome)
+            estado_log   = l.get("estado", "Em Andamento")
+            if estado_log == "Falha":      estado_log = "Cancelada"
+            if estado_log == "A Imprimir": estado_log = "Em Andamento"
             log_data_str = l.get("data_inicio", "")
-            log_data = self.parse_data_segura(log_data_str)
-            if log_data:
-                if d_ini and log_data < d_ini: continue
-                if d_fim and log_data > d_fim: continue
 
             # --- 5. ADICIONAR À TABELA ---
-            tempo_mostrar = l.get("tempo_real", l.get("tempo_estimado", "00:00"))
-            qtd_mostrar = l.get("quantidade_real", l.get("quantidade_consumida", 0.0))
+            # normalizar_tempo converte todos os formatos legacy para HH:MM
+            tempo_mostrar = ProducaoService.normalizar_tempo(l)
+            # Quantidade real quando a ordem já fechou; caso contrário a
+            # estimativa. Para SLS não existe campo direto de quantidade —
+            # estimar_quantidade deriva-a de altura_cuba/percentagem_po_novo,
+            # que é a mesma fonte que o CSV de auditoria já usava (antes o
+            # dashboard lia só os campos em bruto e mostrava 0.0 nesses casos).
+            qtd_mostrar = (
+                l.get("quantidade_real") or
+                ProducaoService.estimar_quantidade(l) or
+                l.get("quantidade") or
+                0.0
+            )
 
             # Formata a data para a tabela (esconde a hora se existir)
             data_tabela = log_data_str.split(" ")[0] if " " in log_data_str else log_data_str
 
-            item_id = self.tab_tree.insert("", "end", values=(
+            # "—" para produções ainda por fechar, para distinguir de um campo em branco
+            # Compatibilidade legacy: "responsavel" era o nome antigo de "operador"
+            operador_log = l.get("operador") or l.get("responsavel") or "—"
+            verificado_log = l.get("verificado_por", "") or "—"
+
+            tag_linha = "tag_" + _VARIANTE_ESTADO.get(estado_log, "neutral")
+            self.tab_tree.insert("", "end", tags=(tag_linha,), values=(
                 ProducaoService.formatar_codigo(l.get("id")), data_tabela, projeto_final, maquina_log,
-                material_final, qtd_mostrar, tempo_mostrar, estado_log
+                material_final, qtd_mostrar, tempo_mostrar, estado_log, operador_log, verificado_log
             ))
-            pill_dados[item_id] = (estado_log, _VARIANTE_ESTADO.get(estado_log, "neutral"))
 
 
             # Cálculos de KPI focados apenas nas peças listadas no ecrã
@@ -269,30 +379,60 @@ class HistoricoTab:
         self.lbl_kpi_total.configure(text=str(total_filtradas))
         self.lbl_kpi_taxa.configure(text=f"{taxa:.1f}%")
         self.lbl_kpi_horas.configure(text=ProducaoService.converter_para_string(total_horas))
-        self.estado_pills.definir_dados(pill_dados)
+
+    def gerar_resumo_diario(self):
+        """Abre a janela do resumo do dia — a mesma que surge automaticamente
+        no arranque da app, mas disponível a qualquer momento a pedido."""
+        from gui.dialogs.resumo_diario import JanelaResumoDiario
+        JanelaResumoDiario(self.parent.winfo_toplevel(), abertura_automatica=False)
+
+    def gerar_pdf_ordem(self):
+        """Gera o PDF da ordem de produção selecionada e abre a pasta de saída."""
+        sel = self.tab_tree.selection()
+        if not sel:
+            messagebox.showwarning("Aviso", "Seleciona uma produção na tabela primeiro.")
+            return
+        id_reg = ProducaoService.extrair_id(self.tab_tree.item(sel[0])['values'][0])
+
+        producao = None
+        for p in ProducaoService.obter_todos():
+            if p.get("id") == id_reg:
+                producao = p
+                break
+        if not producao:
+            messagebox.showerror("Erro", "Produção não encontrada.")
+            return
+
+        vinculos = producao.get("pedidos_vinculados", [])
+        pedidos_vinculados = [p for p in PedidoService.obter_todos() if p.get("id") in vinculos]
+        id_para_nome = MaquinaService.obter_lookup_id_nome()
+
+        pasta_saida = filedialog.askdirectory(title="Escolher pasta para guardar o PDF")
+        if not pasta_saida:
+            return
+
+        codigo = ProducaoService.formatar_codigo(producao.get("id"))
+        caminho = os.path.join(pasta_saida, f"Ordem_{codigo}.pdf")
+
+        try:
+            from services.pdf_service import PDFService
+            PDFService.gerar_ordem_producao(producao, pedidos_vinculados, id_para_nome, caminho)
+            messagebox.showinfo("Sucesso", f"PDF gerado:\n{caminho}")
+        except Exception as e:
+            messagebox.showerror("Erro ao gerar PDF", str(e))
 
     def exportar_csv(self):
         caminho_salvar = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV", "*.csv")])
         if not caminho_salvar: return
 
-        linhas = self.tab_tree.get_children()
-        consumo_materiais = {}
-        horas_maquinas = {}
-        dados_principais = []
+        # Exporta os registos completos por trás das linhas atualmente visíveis
+        # na tabela (respeita os filtros ativos), não só as colunas mostradas.
+        ids_visiveis = {ProducaoService.extrair_id(self.tab_tree.item(i)['values'][0]) for i in self.tab_tree.get_children()}
+        producoes = [p for p in ProducaoService.obter_todos() if p.get("id") in ids_visiveis]
+        pedidos_db = PedidoService.obter_todos()
 
-        for i in linhas:
-            val = self.tab_tree.item(i)['values']
-            dados_principais.append(val)
-            maq, mat = val[3], val[4]
-            try: qnt = float(val[5])
-            except ValueError: qnt = 0.0
-            horas = ProducaoService.converter_para_horas(str(val[6]))
-
-            consumo_materiais[mat] = consumo_materiais.get(mat, 0.0) + qnt
-            horas_maquinas[maq] = horas_maquinas.get(maq, 0.0) + horas
-
-        if ExportService.exportar_historico_csv(caminho_salvar, dados_principais, consumo_materiais, horas_maquinas):
-            messagebox.showinfo("Sucesso", "Exportação analítica concluída.")
+        if ExportService.exportar_historico_csv(caminho_salvar, producoes, pedidos_db):
+            messagebox.showinfo("Sucesso", "Exportação de auditoria concluída.")
         else:
             messagebox.showerror("Erro", "Falha ao salvar CSV.")
 

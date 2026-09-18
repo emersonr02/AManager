@@ -95,10 +95,12 @@ def test_url_imagem_com_esquema_invalido_nao_rebenta(arquivo_maquinas, arquivo_m
     MaquinaService.salvar_maquina(mid="M1", nome="Printer Um", tech="FDM", estado="Operacional",
                                    manutencao="OK", url_img="ficheiro/local/sem-http.png")
 
+    # Um URL sem esquema http(s) não dispara o download em background — o
+    # cartão simplesmente não mostra imagem, sem rebentar nem tentar abrir
+    # o "URL" como caminho local.
     tab = ParqueTab(ctk_root, None, None)
 
-    textos = _labels_texto(tab.scroll_container)
-    assert any("URL de imagem inválido" in t for t in textos)
+    assert "M1" in _labels_texto(tab.scroll_container)
 
 
 def test_atualizar_grid_substitui_cartoes_antigos(arquivo_maquinas, arquivo_manutencoes, arquivo_tarefas_manutencao, ctk_root):

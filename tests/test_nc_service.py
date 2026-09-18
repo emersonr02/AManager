@@ -43,3 +43,16 @@ def test_obter_acoes_por_cod_sem_correspondencia_devolve_lista_vazia(arquivos_nc
     ], caminho_acoes)
 
     assert NCService.obter_acoes_por_cod("COD999") == []
+
+
+def test_obter_descricao_encontra_pelo_codigo(arquivos_nc):
+    caminho_falhas, _ = arquivos_nc
+    JSONManager.salvar([
+        {"cod": "COD001", "descricao": "Obstrução do bico", "tecnologia": "FDM"},
+    ], caminho_falhas)
+
+    assert NCService.obter_descricao("COD001") == "Obstrução do bico"
+
+
+def test_obter_descricao_sem_correspondencia_devolve_vazio(arquivos_nc):
+    assert NCService.obter_descricao("COD999") == ""

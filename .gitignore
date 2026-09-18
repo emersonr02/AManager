@@ -10,3 +10,9 @@ data/*.json
 !data/manutencoes.json
 !data/tarefas_manutencao.json
 .coverage
+
+# Snapshots de backup: contêm cópias completas dos dados de produção
+# (pedidos, produções, etc). O padrão "data/*.json" acima NÃO desce a
+# subpastas, por isso sem esta regra explícita os JSON dentro de cada
+# pasta de backup ficariam fora do .gitignore e seriam commitados.
+data/backups/

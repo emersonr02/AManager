@@ -256,6 +256,10 @@ class TreeviewPillColumn:
             if pill_widget is None or not pill_widget.winfo_exists():
                 pill_widget = pill(self.tree.master, texto, variant)
                 self._pills[item_id] = pill_widget
+            else:
+                # Atualiza texto e cores caso o estado tenha mudado desde a última renderização
+                bg, fg = _PILL_VARIANTS.get(variant, _PILL_VARIANTS["neutral"])
+                pill_widget.configure(text=f" {texto} ", fg_color=bg, text_color=fg)
             pill_widget.configure(width=max(w - 8, 10), height=20)
             pill_widget.place(x=base_x + x + 4, y=base_y + y + max((h - 20) // 2, 0))
 
