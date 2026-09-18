@@ -31,6 +31,11 @@ class JanelaLogisticaMaquina(ctk.CTkToplevel):
         self.ent_nome = theme.entry(self, font=f_padrao)
         self.ent_nome.pack(fill="x", padx=30, pady=5)
 
+        # Campo: Modelo (agrupa unidades iguais para tarefas de manutenção partilhadas)
+        ctk.CTkLabel(self, text="MODELO (EX: BAMBU LAB X1C)", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=30, pady=(10, 0))
+        self.ent_modelo = theme.entry(self, font=f_padrao, placeholder_text="Igual em todas as unidades do mesmo modelo")
+        self.ent_modelo.pack(fill="x", padx=30, pady=5)
+
         # Campo: Tecnologia AM
         ctk.CTkLabel(self, text="TECNOLOGIA AM", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=30, pady=(10, 0))
         self.cmb_tech = theme.combobox(self, values=["FDM", "SLA", "SLS"], font=f_padrao, state="readonly")
@@ -58,6 +63,7 @@ class JanelaLogisticaMaquina(ctk.CTkToplevel):
             self.ent_id.configure(state="disabled") # Bloqueia a edição do ID primário
             
             self.ent_nome.insert(0, self.maquina_dados.get("nome", ""))
+            self.ent_modelo.insert(0, self.maquina_dados.get("modelo", ""))
             self.cmb_tech.set(self.maquina_dados.get("tech", "FDM"))
             self.cmb_est.set(self.maquina_dados.get("estado", "Operacional"))
             
@@ -76,21 +82,23 @@ class JanelaLogisticaMaquina(ctk.CTkToplevel):
     def gravar(self):
         mid = self.ent_id.get().strip()
         nome = self.ent_nome.get().strip()
+        modelo = self.ent_modelo.get().strip()
         notas = self.ent_notas.get().strip()
         url_img = self.ent_url_img.get().strip()
-        
+
         if not mid or not nome:
             messagebox.showwarning("Aviso", "Preencha o ID e o Nome do ativo antes de salvar.")
             return
 
         # Envia todos os dados recolhidos para o serviço tratar a persistência no JSON
         MaquinaService.salvar_maquina(
-            mid=mid, 
-            nome=nome, 
+            mid=mid,
+            nome=nome,
             tech=self.cmb_tech.get(),
-            estado=self.cmb_est.get(), 
+            estado=self.cmb_est.get(),
             manutencao=notas if notas else "OK",
-            url_img=url_img
+            url_img=url_img,
+            modelo=modelo,
         )
         
         self.callback() # Atualiza o mosaico de cards na tela principal imediatamente

@@ -8,6 +8,7 @@ from config.paths import ARQUIVO_PEDIDOS
 from database.json_manager import JSONManager
 from services.producao_service import ProducaoService
 from services.export_service import ExportService
+from services.manutencao_service import ManutencaoService
 from gui.dialogs.fechar_ordem import JanelaFecharOrdem
 from gui import theme
 
@@ -30,6 +31,7 @@ class HistoricoTab:
         self.construir_layout()
         self.carregar_combos_filtro()
         self.atualizar_tabela()
+        self.atualizar_alertas_manutencao()
 
     def construir_layout(self):
         # 1. HEADER & TÍTULO
@@ -81,6 +83,10 @@ class HistoricoTab:
         self.lbl_kpi_total = theme.kpi_card(frm_kpi, "Produções Filtradas", "0")
         self.lbl_kpi_taxa = theme.kpi_card(frm_kpi, "Taxa de Sucesso", "0.0%", theme.SUCCESS)
         self.lbl_kpi_horas = theme.kpi_card(frm_kpi, "Total de Horas", "00:00", theme.TEAL)
+        self.lbl_kpi_manutencao = theme.kpi_card(frm_kpi, "Manutenção", "0 atrasadas", theme.CRITICAL)
+        # Clicável: salta diretamente para o separador de Manutenção.
+        self.lbl_kpi_manutencao.configure(cursor="hand2")
+        self.lbl_kpi_manutencao.bind("<Button-1>", self._ir_para_manutencao)
 
         # 4. CONTAINER DA TABELA
         frm_conteudo = ctk.CTkFrame(self.parent, fg_color=theme.SURFACE, corner_radius=theme.RADIUS_M, border_width=1, border_color=theme.BORDER)
@@ -135,6 +141,18 @@ class HistoricoTab:
         maquinas = ["Todas"] + sorted(list(set(l.get("maquina", "") for l in logs if l.get("maquina"))))
         self.flt_maq.configure(values=maquinas)
         self.flt_maq.set("Todas")
+
+    def _ir_para_manutencao(self, event=None):
+        self.master_app.selecionar_tela("manutencao")
+
+    def atualizar_alertas_manutencao(self):
+        resumo = ManutencaoService.contar_alertas()
+        if resumo["atrasadas"] > 0:
+            self.lbl_kpi_manutencao.configure(text=f"{resumo['atrasadas']} atrasadas", text_color=theme.CRITICAL)
+        elif resumo["proximas"] > 0:
+            self.lbl_kpi_manutencao.configure(text=f"{resumo['proximas']} em breve", text_color=theme.WARNING)
+        else:
+            self.lbl_kpi_manutencao.configure(text="Tudo em dia", text_color=theme.SUCCESS)
 
     def limpar_filtros(self):
         self.flt_data_ini.delete(0, tk.END)

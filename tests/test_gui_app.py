@@ -26,6 +26,16 @@ def test_selecionar_tela_producao_destaca_botao_acao(app_sessao):
     assert app_sessao.btn_producao.cget("fg_color") != app_sessao.btn_dash.cget("fg_color")
 
 
+def test_selecionar_tela_manutencao_mostra_apenas_esse_frame(app_sessao):
+    app_sessao.selecionar_tela("manutencao")
+
+    assert _esta_visivel(app_sessao.frame_manutencao)
+    assert not _esta_visivel(app_sessao.frame_dash)
+    assert not _esta_visivel(app_sessao.frame_pedidos)
+    assert not _esta_visivel(app_sessao.frame_parque)
+    assert not _esta_visivel(app_sessao.frame_producao)
+
+
 def test_pasta_dados_acessivel_confirma_escrita_real(app_sessao, tmp_path, monkeypatch):
     from gui import app as app_module
 

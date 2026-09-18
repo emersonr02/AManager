@@ -6,6 +6,7 @@ import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox
 from services.maquina_service import MaquinaService
+from services.manutencao_service import ManutencaoService
 from gui.dialogs.logistica_maquina import JanelaLogisticaMaquina
 from gui import theme
 
@@ -37,7 +38,14 @@ class ParqueTab:
             widget.destroy()
 
         maquinas = MaquinaService.obter_todas()
-        
+
+        # Calculado uma única vez para toda a grelha (não por cartão) — é um join
+        # sobre todas as máquinas/tarefas/produções, repeti-lo por cartão seria
+        # refazer o mesmo trabalho N vezes.
+        maquinas_atrasadas = {
+            l["maquina_id"] for l in ManutencaoService.calcular_proximas_tarefas() if l["estado"] == "atrasada"
+        }
+
         for i in range(4):
             self.scroll_container.grid_columnconfigure(i, weight=1, minsize=240)
 
@@ -82,11 +90,18 @@ class ParqueTab:
                 lbl_img_erro.pack(pady=(15, 5))
 
             # --- TAG DE STATUS ---
-            theme.pill(card, estado.upper(), variante_estado).pack(anchor="e", padx=15, pady=(15, 0))
+            frm_tags = ctk.CTkFrame(card, fg_color="transparent")
+            frm_tags.pack(anchor="e", padx=15, pady=(15, 0))
+            if m.get("id") in maquinas_atrasadas:
+                theme.pill(frm_tags, "MANUTENÇÃO ATRASADA", "bad").pack(side="left", padx=(0, 6))
+            theme.pill(frm_tags, estado.upper(), variante_estado).pack(side="left")
 
             # Identificação
             ctk.CTkLabel(card, text=m.get("id"), font=theme.font_mono(17, "bold"), text_color=theme.ACCENT).pack(anchor="w", padx=15, pady=(8, 0))
             ctk.CTkLabel(card, text=m.get("nome"), font=self.f_padrao, text_color=theme.TEXT).pack(anchor="w", padx=15, pady=(0, 5))
+
+            if m.get("modelo"):
+                ctk.CTkLabel(card, text=f"Modelo: {m.get('modelo')}", font=theme.font_body(11), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=15)
 
             lbl_tech = ctk.CTkLabel(card, text=f"Tecnologia: {m.get('tech')}", font=theme.font_body(11), text_color=theme.TEXT_MUTED)
             lbl_tech.pack(anchor="w", padx=15)

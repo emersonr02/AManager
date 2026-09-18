@@ -10,6 +10,7 @@ from gui.pedidos_tab import PedidosTab
 from gui.producao_tab import ProducaoTab
 from gui.historico_tab import HistoricoTab
 from gui.parque_tab import ParqueTab
+from gui.manutencao_tab import ManutencaoTab
 
 ctk.set_appearance_mode("light")
 
@@ -84,6 +85,10 @@ class AppIndustrialI3D(ctk.CTk):
         )
         self.btn_producao.grid(row=4, column=0, padx=10, pady=(18, 3), sticky="ew") # Espaçamento extra acima para isolar o botão de ação
 
+        # 5. Manutenção
+        self.btn_manutencao = ctk.CTkButton(self.sidebar_frame, text="🛠️  Manutenção", command=lambda: self.selecionar_tela("manutencao"), **config_btn_padrao)
+        self.btn_manutencao.grid(row=5, column=0, padx=10, pady=3, sticky="ew")
+
         # --- RODAPÉ: ESTADO DA REDE ---
         frm_foot = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
         frm_foot.grid(row=7, column=0, padx=16, pady=16, sticky="sw")
@@ -98,12 +103,14 @@ class AppIndustrialI3D(ctk.CTk):
         self.frame_pedidos = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         self.frame_producao = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         self.frame_parque = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
+        self.frame_manutencao = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
 
         # Instanciamos as UIs passando os seus respectivos containers
         self.historico_ui = HistoricoTab(self.frame_dash, self.f_padrao, self.f_titulo, self)
         self.pedidos_ui = PedidosTab(self.frame_pedidos, self.f_padrao, self.f_titulo)
         self.producao_ui = ProducaoTab(self.frame_producao, self.f_padrao, self.f_titulo, self)
         self.parque_ui = ParqueTab(self.frame_parque, self.f_padrao, self.f_titulo)
+        self.manutencao_ui = ManutencaoTab(self.frame_manutencao, self.f_padrao, self.f_titulo, self)
 
         # Iniciar a aplicação mostrando o Dashboard
         self.selecionar_tela("dash")
@@ -119,12 +126,14 @@ class AppIndustrialI3D(ctk.CTk):
         self.frame_pedidos.grid_forget()
         self.frame_producao.grid_forget()
         self.frame_parque.grid_forget()
+        self.frame_manutencao.grid_forget()
 
         # 2. Reseta a cor dos botões normais de navegação
         cor_padrao = {"fg_color": "transparent"}
         self.btn_dash.configure(**cor_padrao)
         self.btn_pedidos.configure(**cor_padrao)
         self.btn_parque.configure(**cor_padrao)
+        self.btn_manutencao.configure(**cor_padrao)
 
         # Reseta o botão de Nova Produção para a cor original dele
         self.btn_producao.configure(fg_color=theme.TEAL)
@@ -145,6 +154,9 @@ class AppIndustrialI3D(ctk.CTk):
             self.frame_producao.grid(row=0, column=1, sticky="nsew")
             # Quando estiver na tela de produção, o botão ganha um destaque de seleção diferente
             self.btn_producao.configure(fg_color=theme.TEAL_HOVER)
+        elif nome_tela == "manutencao":
+            self.frame_manutencao.grid(row=0, column=1, sticky="nsew")
+            self.btn_manutencao.configure(**cor_ativo)
 
     def redimensionar_fontes(self, event):
         if event.widget == self:

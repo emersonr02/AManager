@@ -1,5 +1,10 @@
+from datetime import datetime, timedelta
+
+from database.json_manager import JSONManager
 from services.pedido_service import PedidoService
 from services.producao_service import ProducaoService
+from services.maquina_service import MaquinaService
+from services.manutencao_service import ManutencaoService
 from gui.historico_tab import HistoricoTab
 
 
@@ -196,3 +201,33 @@ def test_exportar_csv_gera_ficheiro_a_partir_da_tabela(gui_arquivos, ctk_root, m
     with open(destino, encoding="utf-8-sig") as f:
         conteudo = f.read()
     assert "X1C-1" in conteudo
+
+
+def test_alerta_manutencao_sem_tarefas_mostra_tudo_em_dia(gui_arquivos, ctk_root):
+    tab = HistoricoTab(ctk_root, None, None, None)
+
+    assert tab.lbl_kpi_manutencao.cget("text") == "Tudo em dia"
+
+
+def test_alerta_manutencao_mostra_contagem_de_atrasadas(gui_arquivos, ctk_root):
+    MaquinaService.salvar_maquina(mid="M1", nome="Printer 1", tech="FDM", estado="Operacional", manutencao="OK", modelo="Bambu Lab X1C")
+    tarefa = ManutencaoService.criar_tarefa(modelo="Bambu Lab X1C", nome="Limpeza", frequencia_dias=10)
+    JSONManager.salvar([{
+        "id": 1, "tarefa_id": tarefa["id"], "maquina_id": "M1",
+        "data_realizacao": (datetime.now() - timedelta(days=20)).strftime("%Y-%m-%d %H:%M:%S"),
+        "operador": "a", "notas": "",
+    }], gui_arquivos["manutencoes"])
+
+    tab = HistoricoTab(ctk_root, None, None, None)
+
+    assert tab.lbl_kpi_manutencao.cget("text") == "1 atrasadas"
+
+
+def test_alerta_manutencao_clique_navega_para_manutencao(gui_arquivos, ctk_root):
+    chamadas = []
+    master_app_falso = type("MasterAppFalso", (), {"selecionar_tela": lambda self, nome: chamadas.append(nome)})()
+    tab = HistoricoTab(ctk_root, None, None, master_app_falso)
+
+    tab._ir_para_manutencao()
+
+    assert chamadas == ["manutencao"]

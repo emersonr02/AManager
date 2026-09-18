@@ -15,7 +15,7 @@ class MaquinaService:
         return [m["id"] for m in maquinas if m.get("tech") == tecnologia and m.get("estado") == "Operacional"]
 
     @staticmethod
-    def salvar_maquina(mid: str, nome: str, tech: str, estado: str, manutencao: str, url_img: str = ""):
+    def salvar_maquina(mid: str, nome: str, tech: str, estado: str, manutencao: str, url_img: str = "", modelo: str = ""):
         def _transformar(maquinas):
             for m in maquinas:
                 if m.get("id") == mid:
@@ -24,7 +24,8 @@ class MaquinaService:
                         "tech": tech,
                         "estado": estado,
                         "manutencao": manutencao,
-                        "url_img": url_img  # Atualiza
+                        "url_img": url_img,  # Atualiza
+                        "modelo": modelo,
                     })
                     return maquinas
 
@@ -34,7 +35,8 @@ class MaquinaService:
                 "tech": tech,
                 "estado": estado,
                 "manutencao": manutencao,
-                "url_img": url_img  # Cria novo
+                "url_img": url_img,  # Cria novo
+                "modelo": modelo,
             })
             return maquinas
 

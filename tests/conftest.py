@@ -4,7 +4,7 @@ import os
 import pytest
 
 from database import json_manager
-from services import pedido_service, maquina_service, nc_service, projeto_service, material_service, producao_service
+from services import pedido_service, maquina_service, nc_service, projeto_service, material_service, producao_service, manutencao_service
 
 # customtkinter tenta pintar a titlebar nativa a cada CTk/CTkToplevel criado no
 # Windows, através de ctypes + DWM (withdraw -> update -> GetParent -> DwmSetWindowAttribute).
@@ -125,6 +125,20 @@ def arquivo_maquinas(tmp_path, monkeypatch):
 
 
 @pytest.fixture
+def arquivo_manutencoes(tmp_path, monkeypatch):
+    caminho = tmp_path / "manutencoes.json"
+    monkeypatch.setattr(manutencao_service, "ARQUIVO_MANUTENCOES", str(caminho))
+    return str(caminho)
+
+
+@pytest.fixture
+def arquivo_tarefas_manutencao(tmp_path, monkeypatch):
+    caminho = tmp_path / "tarefas_manutencao.json"
+    monkeypatch.setattr(manutencao_service, "ARQUIVO_TAREFAS_MANUTENCAO", str(caminho))
+    return str(caminho)
+
+
+@pytest.fixture
 def arquivos_nc(tmp_path, monkeypatch):
     falhas = tmp_path / "nc_falhas.json"
     acoes = tmp_path / "acoes_corretivas.json"
@@ -148,6 +162,8 @@ def _aplicar_patches_gui(mp, base_dir):
         "pedidos": base_dir / "pedidos.json",
         "producoes": base_dir / "producao_i3D.json",
         "maquinas": base_dir / "parque_maquinas.json",
+        "manutencoes": base_dir / "manutencoes.json",
+        "tarefas_manutencao": base_dir / "tarefas_manutencao.json",
     }
 
     mp.setattr(pedido_service, "ARQUIVO_PEDIDOS", str(caminhos["pedidos"]))
@@ -159,6 +175,11 @@ def _aplicar_patches_gui(mp, base_dir):
 
     mp.setattr(maquina_service, "ARQUIVO_MAQUINAS", str(caminhos["maquinas"]))
     mp.setattr(producao_tab, "ARQUIVO_MAQUINAS", str(caminhos["maquinas"]))
+
+    # manutencao_tab.py só fala com ManutencaoService (nunca importa estas constantes
+    # por nome), por isso basta patchar o service — nenhum módulo de gui/ a mais aqui.
+    mp.setattr(manutencao_service, "ARQUIVO_MANUTENCOES", str(caminhos["manutencoes"]))
+    mp.setattr(manutencao_service, "ARQUIVO_TAREFAS_MANUTENCAO", str(caminhos["tarefas_manutencao"]))
 
     return {k: str(v) for k, v in caminhos.items()}
 
