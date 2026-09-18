@@ -7,3 +7,4 @@ data/*.json
 !data/nc_falhas.json
 !data/acoes_corretivas.json
 !data/parque_maquinas.json
+.coverage
