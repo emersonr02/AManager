@@ -9,6 +9,18 @@ def test_salvar_maquina_nova_cria_exatamente_um_registo(arquivo_maquinas):
     assert maquinas[0]["url_img"] == "http://x/img.png"
 
 
+def test_salvar_maquina_grava_modelo(arquivo_maquinas):
+    MaquinaService.salvar_maquina("M1", "Impressora 1", "FDM", "Operacional", "OK", modelo="Bambu Lab X1C")
+
+    assert MaquinaService.obter_todas()[0]["modelo"] == "Bambu Lab X1C"
+
+
+def test_salvar_maquina_sem_modelo_fica_vazio_por_omissao(arquivo_maquinas):
+    MaquinaService.salvar_maquina("M1", "Impressora 1", "FDM", "Operacional", "OK", "http://x/img.png")
+
+    assert MaquinaService.obter_todas()[0]["modelo"] == ""
+
+
 def test_salvar_maquina_existente_atualiza_sem_duplicar(arquivo_maquinas):
     MaquinaService.salvar_maquina("M1", "Impressora 1", "FDM", "Operacional", "OK", "")
     MaquinaService.salvar_maquina("M1", "Impressora 1 Atualizada", "FDM", "Manutenção", "Pendente", "")

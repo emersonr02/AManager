@@ -51,3 +51,19 @@ def test_normaliza_entradas_legadas_em_formato_de_string(arquivo_materiais):
     materiais = MaterialService.obter_todos()
 
     assert materiais == [{"nome": "PA12", "fabricante": "3DSystems", "ativo": True}]
+
+
+def test_normaliza_entrada_legada_sem_separador_assume_fabricante_vazio(arquivo_materiais):
+    JSONManager.salvar(["PA12"], arquivo_materiais)
+
+    materiais = MaterialService.obter_todos()
+
+    assert materiais == [{"nome": "PA12", "fabricante": "", "ativo": True}]
+
+
+def test_atualizar_material_para_par_ja_existente_falha(arquivo_materiais):
+    MaterialService.criar_material("TPU", "Generic")
+    MaterialService.criar_material("PA12", "3DSystems")
+
+    with pytest.raises(ValueError):
+        MaterialService.atualizar_material("TPU", "Generic", "PA12", "3DSystems")

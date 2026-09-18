@@ -1,6 +1,31 @@
 from datetime import datetime
 
+import pytest
+
 from services.pedido_service import PedidoService
+
+
+@pytest.mark.parametrize("id_pedido,esperado", [
+    (7, "PED000007"),
+    ("7", "PED000007"),
+    (0, "PED000000"),
+    ("abc", "abc"),
+    (None, "None"),
+])
+def test_formatar_codigo(id_pedido, esperado):
+    assert PedidoService.formatar_codigo(id_pedido) == esperado
+
+
+@pytest.mark.parametrize("codigo,esperado", [
+    ("PED000007", 7),
+    ("7", 7),
+    (7, 7),
+    ("PED-000-045", 45),
+    ("sem digitos", None),
+    ("", None),
+])
+def test_extrair_id(codigo, esperado):
+    assert PedidoService.extrair_id(codigo) == esperado
 
 
 def _criar(arquivo_pedidos, **overrides):

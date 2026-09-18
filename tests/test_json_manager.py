@@ -1,4 +1,5 @@
 import os
+import time
 
 from database.json_manager import JSONManager
 
@@ -41,3 +42,22 @@ def test_nao_deixa_lock_pendurado_apos_operacoes(json_file):
 def test_escrita_nao_deixa_ficheiro_temporario_para_tras(json_file):
     JSONManager.salvar([1, 2, 3], json_file)
     assert not os.path.exists(json_file + ".tmp")
+
+
+def test_lock_preso_e_quebrado_apos_timeout(json_file, monkeypatch):
+    lock_file = json_file + ".lock"
+    fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    os.close(fd)
+
+    tempos = iter([0, 0, 6, 6])  # start_time, 1a checagem (dentro do timeout), 2a checagem (expirou)
+    monkeypatch.setattr(time, "time", lambda: next(tempos, 6))
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+
+    JSONManager._adquirir_lock(json_file, timeout=5)
+
+    assert os.path.exists(lock_file)
+    JSONManager._libertar_lock(json_file)
+
+
+def test_libertar_lock_sem_ficheiro_nao_gera_erro(json_file):
+    JSONManager._libertar_lock(json_file)

@@ -8,6 +8,7 @@ import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox
 from services.maquina_service import MaquinaService
+from services.manutencao_service import ManutencaoService
 from services.producao_service import ProducaoService
 from gui.dialogs.logistica_maquina import JanelaLogisticaMaquina
 from gui import theme
@@ -46,6 +47,13 @@ class ParqueTab:
         for w in self.scroll_container.winfo_children():
             w.destroy()
 
+        # Calculado uma única vez para toda a grelha (não por cartão) — é um join
+        # sobre todas as máquinas/tarefas/produções, repeti-lo por cartão seria
+        # refazer o mesmo trabalho N vezes.
+        maquinas_atrasadas = {
+            l["maquina_id"] for l in ManutencaoService.calcular_proximas_tarefas() if l["estado"] == "atrasada"
+        }
+
         for i in range(4):
             self.scroll_container.grid_columnconfigure(i, weight=1, minsize=240)
 
@@ -56,7 +64,8 @@ class ParqueTab:
         row = col = 0
         for m in maquinas:
             producao_ativa = fila_por_maquina.get(m.get("id"))
-            self._criar_card(m, row, col, producao_ativa)
+            atrasada = m.get("id") in maquinas_atrasadas
+            self._criar_card(m, row, col, producao_ativa, atrasada)
             col += 1
             if col > 3:
                 col = 0
@@ -90,7 +99,7 @@ class ParqueTab:
     #  CARD DA MÁQUINA                                                     #
     # ------------------------------------------------------------------ #
 
-    def _criar_card(self, m: dict, row: int, col: int, producao_ativa: dict = None):
+    def _criar_card(self, m: dict, row: int, col: int, producao_ativa: dict = None, atrasada: bool = False):
         estado = m.get("estado", "Operacional")
         notas  = m.get("manutencao", "OK")
         url    = m.get("url_img", "")
@@ -125,11 +134,19 @@ class ParqueTab:
         else:
             lbl_img.configure(text="")
 
-        theme.pill(card, texto_pill, variante_pill).pack(anchor="e", padx=15, pady=(15, 0))
+        frm_tags = ctk.CTkFrame(card, fg_color="transparent")
+        frm_tags.pack(anchor="e", padx=15, pady=(15, 0))
+        if atrasada:
+            theme.pill(frm_tags, "MANUTENÇÃO ATRASADA", "bad").pack(side="left", padx=(0, 6))
+        theme.pill(frm_tags, texto_pill, variante_pill).pack(side="left")
+
         ctk.CTkLabel(card, text=m.get("id"), font=theme.font_mono(17, "bold"),
                      text_color=theme.ACCENT).pack(anchor="w", padx=15, pady=(8, 0))
         ctk.CTkLabel(card, text=m.get("nome"), font=self.f_padrao,
                      text_color=theme.TEXT).pack(anchor="w", padx=15, pady=(0, 5))
+        if m.get("modelo"):
+            ctk.CTkLabel(card, text=f"Modelo: {m.get('modelo')}", font=theme.font_body(11),
+                         text_color=theme.TEXT_MUTED).pack(anchor="w", padx=15)
         ctk.CTkLabel(card, text=f"Tecnologia: {m.get('tech')}",
                      font=theme.font_body(11), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=15)
 

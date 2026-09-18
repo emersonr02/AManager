@@ -81,6 +81,11 @@ class AppIndustrialI3D(ctk.CTk):
         )
         self.btn_producao.grid(row=5, column=0, padx=10, pady=(18, 3), sticky="ew")
 
+        self.btn_manutencao = ctk.CTkButton(self.sidebar_frame, text="🛠️  Manutenção",
+                                            command=lambda: self.selecionar_tela("manutencao"),
+                                            **_btn_cfg)
+        self.btn_manutencao.grid(row=6, column=0, padx=10, pady=3, sticky="ew")
+
         # Rodapé — estado da rede + estado do backup automático
         frm_foot = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
         frm_foot.grid(row=8, column=0, padx=16, pady=16, sticky="sw")
@@ -109,11 +114,12 @@ class AppIndustrialI3D(ctk.CTk):
 
         # Mapa nome → (classe, args_extra)
         self._tab_registry = {
-            "dash":      ("HistoricoTab", (self,)),
-            "pedidos":   ("PedidosTab",   ()),
-            "producao":  ("ProducaoTab",  (self,)),
-            "parque":    ("ParqueTab",    ()),
-            "analytics": ("AnalyticsTab", (self,)),
+            "dash":        ("HistoricoTab", (self,)),
+            "pedidos":     ("PedidosTab",   ()),
+            "producao":    ("ProducaoTab",  (self,)),
+            "parque":      ("ParqueTab",    ()),
+            "analytics":   ("AnalyticsTab", (self,)),
+            "manutencao":  ("ManutencaoTab", (self,)),
         }
 
         # Botão atualmente ativo — para reset com um único .configure()
@@ -166,7 +172,7 @@ class AppIndustrialI3D(ctk.CTk):
         # 5. Destaca botão ativo
         btn_map = {"dash": self.btn_dash, "pedidos": self.btn_pedidos,
                    "parque": self.btn_parque, "producao": self.btn_producao,
-                   "analytics": self.btn_analytics}
+                   "analytics": self.btn_analytics, "manutencao": self.btn_manutencao}
         btn = btn_map.get(nome_tela)
         if btn:
             btn.configure(fg_color=theme.TEAL_HOVER if nome_tela == "producao"
@@ -180,9 +186,10 @@ class AppIndustrialI3D(ctk.CTk):
         from gui.producao_tab import ProducaoTab
         from gui.parque_tab import ParqueTab
         from gui.analytics_tab import AnalyticsTab
+        from gui.manutencao_tab import ManutencaoTab
         classes = {"HistoricoTab": HistoricoTab, "PedidosTab": PedidosTab,
                    "ProducaoTab": ProducaoTab, "ParqueTab": ParqueTab,
-                   "AnalyticsTab": AnalyticsTab}
+                   "AnalyticsTab": AnalyticsTab, "ManutencaoTab": ManutencaoTab}
 
         cls_name, extra_args = self._tab_registry[nome]
         cls = classes[cls_name]
@@ -206,6 +213,10 @@ class AppIndustrialI3D(ctk.CTk):
             ui.atualizar_grid_maquinas()
         elif nome == "analytics" and hasattr(ui, "atualizar_tabela"):
             ui.atualizar_tabela()
+        elif nome == "manutencao" and hasattr(ui, "atualizar_agenda"):
+            ui.atualizar_agenda()
+            ui.atualizar_lista_tarefas()
+            ui.atualizar_historico()
         # "producao" não tem dados para refrescar (é um formulário)
 
     # ── FONTES RESPONSIVAS ────────────────────────────────────────────────
