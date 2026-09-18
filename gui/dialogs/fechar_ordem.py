@@ -34,16 +34,31 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         vinculos = self.log.get("pedidos_vinculados", [])
         
         materiais_set = set()
-        
+        qa_gravado = self.log.get("qa_por_peca", {})
+        self.linhas_qa_dados = []
+
         # 1. Formatar os IDs dos pedidos (Substituindo o Projeto)
         if vinculos:
             self.pedidos_fmt = ", ".join(PedidoService.formatar_codigo(v) for v in vinculos)
-            
-            # Aproveitar para extrair materiais diretamente dos pedidos vinculados
+
+            # Aproveitar para extrair materiais e a lista de peças (QA por peça)
+            # diretamente dos pedidos vinculados.
             for p in pedidos_db:
                 if p.get("id") in vinculos:
-                    for peca in p.get("pecas", []):
+                    for idx, peca in enumerate(p.get("pecas", [])):
                         if peca.get("material"): materiais_set.add(peca["material"])
+                        # O índice entra na chave porque novo_pedido.py não impede PNs
+                        # repetidos dentro do mesmo pedido — sem ele, duas linhas com o
+                        # mesmo PN colidiriam na mesma entrada de QA.
+                        chave = f"{p['id']}:{peca.get('pn', '')}:{idx}"
+                        self.linhas_qa_dados.append({
+                            "chave": chave,
+                            "pedido_id": p["id"],
+                            "pn": peca.get("pn", ""),
+                            "material": peca.get("material", ""),
+                            "qtd": peca.get("qtd_solicitada", ""),
+                            "gravado": qa_gravado.get(chave, {}),
+                        })
         else:
             self.pedidos_fmt = "Nenhum vínculo direto"
 
@@ -137,32 +152,40 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
         self.cmb_estado.set(estado_atual)
         self.cmb_estado.pack(padx=20, pady=5)
 
-        # --- CRITÉRIOS DE ACEITAÇÃO ---
+        # --- CRITÉRIOS DE ACEITAÇÃO (POR PEÇA) ---
         frm_cq = ctk.CTkFrame(self, fg_color=theme.SURFACE, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_M)
         frm_cq.pack(fill="x", padx=20, pady=15)
-        ctk.CTkLabel(frm_cq, text="CRITÉRIOS DE ACEITAÇÃO (CONTROLO DE QUALIDADE)", font=theme.font_eyebrow(9), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=15, pady=(10, 5))
+        ctk.CTkLabel(frm_cq, text="CRITÉRIOS DE ACEITAÇÃO (CONTROLO DE QUALIDADE POR PEÇA)", font=theme.font_eyebrow(9), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=15, pady=(10, 5))
 
-        frm_checks = ctk.CTkFrame(frm_cq, fg_color="transparent")
-        frm_checks.pack(fill="x", padx=15, pady=(5, 10))
-
-        qa_data = self.log.get("controlo_qualidade", {})
         checkbox_kwargs = dict(fg_color=theme.ACCENT, hover_color=theme.ACCENT_HOVER, checkmark_color=theme.WHITE, border_color=theme.TEXT_MUTED, text_color=theme.TEXT)
+        self.linhas_qa = []
 
-        # Agora iniciam desmarcados, obrigando à verificação ativa (ou assumem o valor se já foi gravado antes)
-        self.chk_visual = ctk.CTkCheckBox(frm_checks, text="Inspeção\nVisual", font=theme.font_body(11), **checkbox_kwargs)
-        self.chk_visual.pack(side="left", expand=True)
-        if qa_data.get("inspecao_visual"): self.chk_visual.select()
-        else: self.chk_visual.deselect()
+        if not self.linhas_qa_dados:
+            ctk.CTkLabel(frm_cq, text="Sem peças associadas a esta ordem.", font=theme.font_body(11), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=15, pady=(0, 10))
+        else:
+            frm_scroll_qa = ctk.CTkScrollableFrame(frm_cq, fg_color=theme.SURFACE_ALT, height=180, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_S)
+            frm_scroll_qa.pack(fill="x", padx=15, pady=(0, 10))
 
-        self.chk_dimens = ctk.CTkCheckBox(frm_checks, text="Controlo\nDimensional", font=theme.font_body(11), **checkbox_kwargs)
-        self.chk_dimens.pack(side="left", expand=True)
-        if qa_data.get("controlo_dimensional"): self.chk_dimens.select()
-        else: self.chk_dimens.deselect()
+            for peca in self.linhas_qa_dados:
+                linha_frm = ctk.CTkFrame(frm_scroll_qa, fg_color="transparent")
+                linha_frm.pack(fill="x", pady=4)
 
-        self.chk_conform = ctk.CTkCheckBox(frm_checks, text="Conformidade\ndas Peças", font=theme.font_body(11), **checkbox_kwargs)
-        self.chk_conform.pack(side="left", expand=True)
-        if qa_data.get("conformidade"): self.chk_conform.select()
-        else: self.chk_conform.deselect()
+                rotulo = f"{PedidoService.formatar_codigo(peca['pedido_id'])} · {peca['pn']} ({peca['material']}, qtd {peca['qtd']})"
+                ctk.CTkLabel(linha_frm, text=rotulo, font=theme.font_body(11), text_color=theme.TEXT, anchor="w", width=220, wraplength=210, justify="left").pack(side="left", padx=(5, 10))
+
+                gravado = peca["gravado"]
+                v_visual = tk.BooleanVar(value=bool(gravado.get("inspecao_visual")))
+                v_dimens = tk.BooleanVar(value=bool(gravado.get("controlo_dimensional")))
+                v_conform = tk.BooleanVar(value=bool(gravado.get("conformidade")))
+
+                ctk.CTkCheckBox(linha_frm, text="Visual", font=theme.font_body(10), variable=v_visual, width=1, **checkbox_kwargs).pack(side="left", expand=True)
+                ctk.CTkCheckBox(linha_frm, text="Dimensional", font=theme.font_body(10), variable=v_dimens, width=1, **checkbox_kwargs).pack(side="left", expand=True)
+                ctk.CTkCheckBox(linha_frm, text="Conformidade", font=theme.font_body(10), variable=v_conform, width=1, **checkbox_kwargs).pack(side="left", expand=True)
+
+                self.linhas_qa.append({
+                    "chave": peca["chave"],
+                    "visual": v_visual, "dimensional": v_dimens, "conformidade": v_conform,
+                })
 
         # --- NÃO-CONFORMIDADE (OPCIONAL) ---
         frm_nc = ctk.CTkFrame(self, fg_color=theme.SURFACE, border_width=1, border_color=theme.BORDER, corner_radius=theme.RADIUS_M)
@@ -209,19 +232,28 @@ class JanelaFecharOrdem(ctk.CTkToplevel):
             messagebox.showerror("Erro", "Preencha o Tempo Real e a Quantidade Real antes de fechar a ordem.")
             return
 
-        # Impede fechar a ordem se a qualidade não estiver aprovada (Opcional: podes remover este bloco se for permitido fechar sem os 3 checks)
-        if est_final == "Concluída" and not (self.chk_visual.get() and self.chk_dimens.get() and self.chk_conform.get()):
-            if not messagebox.askyesno("Aviso de Qualidade", "Atenção: Os critérios de aceitação não estão todos validados.\nDesejas concluir a ordem mesmo assim?"):
+        # Impede fechar a ordem se alguma peça não tiver a qualidade toda aprovada
+        # (Opcional: podes remover este bloco se for permitido fechar sem os 3 checks).
+        # Nota: all([]) é True — uma ordem sem peças vinculadas não bloqueia.
+        todas_completas = all(
+            v["visual"].get() and v["dimensional"].get() and v["conformidade"].get()
+            for v in self.linhas_qa
+        )
+        if est_final == "Concluída" and not todas_completas:
+            if not messagebox.askyesno("Aviso de Qualidade", "Atenção: Nem todas as peças têm os critérios de aceitação validados.\nDesejas concluir a ordem mesmo assim?"):
                 return
 
         self.log["tempo_real"] = t_real
         self.log["quantidade_real"] = q_real
         self.log["estado"] = est_final
-        
-        self.log["controlo_qualidade"] = {
-            "inspecao_visual": self.chk_visual.get() == 1,
-            "controlo_dimensional": self.chk_dimens.get() == 1,
-            "conformidade": self.chk_conform.get() == 1
+
+        self.log["qa_por_peca"] = {
+            v["chave"]: {
+                "inspecao_visual": v["visual"].get(),
+                "controlo_dimensional": v["dimensional"].get(),
+                "conformidade": v["conformidade"].get(),
+            }
+            for v in self.linhas_qa
         }
 
         nc_sel = self.cmb_nc.get()
