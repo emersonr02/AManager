@@ -18,6 +18,14 @@ class MaquinaService:
         }
 
     @staticmethod
+    def esta_disponivel(maquina: dict) -> bool:
+        """Pode receber uma nova produção? Só "Operacional" — antes a Nova Produção
+        excluía por palavras ("inativa", "manutenção") e deixava passar "Desativado".
+        Sem campo estado (registos muito antigos) conta como disponível, tal como
+        o default "Ativa" que a UI já assumia."""
+        return maquina.get("estado", "Operacional") in ("Operacional", "Ativa")
+
+    @staticmethod
     def obter_ativas_por_tecnologia(tecnologia: str):
         maquinas = JSONManager.carregar(ARQUIVO_MAQUINAS)
         return [m["id"] for m in maquinas if m.get("tech") == tecnologia and m.get("estado") == "Operacional"]

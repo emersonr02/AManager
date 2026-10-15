@@ -2,7 +2,16 @@ import pytest
 
 from services.projeto_service import ProjetoService
 from services.material_service import MaterialService
-from gui.dialogs.gestao_projetos_materiais import JanelaGestaoProjetosMateriais
+import customtkinter as ctk
+
+from gui.dialogs.gestao_projetos_materiais import GestaoProjetosMateriais
+
+
+def JanelaGestaoProjetosMateriais(ctk_root, callback=None):
+    """Monta o componente (agora embebido no ecrã Configuração) em dois frames
+    descartáveis — mantém os testes iguais aos da antiga janela."""
+    tab_proj, tab_mat = ctk.CTkFrame(ctk_root), ctk.CTkFrame(ctk_root)
+    return GestaoProjetosMateriais(tab_proj, tab_mat, callback)
 
 
 @pytest.fixture
@@ -114,9 +123,9 @@ def test_editar_projeto_guarda_alteracoes(arquivo_projetos, ctk_root, avisos):
     win.tree_proj.selection_set(win.tree_proj.get_children()[0])
 
     win.editar_projeto_selecionado()
-    top = win.winfo_children()[-1]
+    top = win.dialogo_edicao
     entradas = _encontrar_widgets(top, "CTkEntry")
-    botao = _encontrar_widgets(top, "CTkButton")[0]
+    botao = top.btn_acao
     ent_id, ent_nome = entradas[0], entradas[1]
 
     ent_nome.delete(0, "end")
@@ -196,9 +205,9 @@ def test_editar_material_guarda_alteracoes(arquivo_materiais, ctk_root, avisos):
     win.tree_mat.selection_set(win.tree_mat.get_children()[0])
 
     win.editar_material_selecionado()
-    top = win.winfo_children()[-1]
+    top = win.dialogo_edicao
     entradas = _encontrar_widgets(top, "CTkEntry")
-    botao = _encontrar_widgets(top, "CTkButton")[0]
+    botao = top.btn_acao
     ent_nome, ent_fab = entradas[0], entradas[1]
 
     ent_nome.delete(0, "end")

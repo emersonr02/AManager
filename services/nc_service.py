@@ -29,6 +29,14 @@ class NCService:
         return lista_formatada
 
     @staticmethod
+    def obter_todos_codigos() -> list:
+        """Catálogo completo de códigos NC ([{cod, descricao, tecnologia}]),
+        ordenado por tecnologia e código — usado no ecrã Configuração."""
+        NCService.garantir_arquivos()
+        ncs = JSONManager.carregar(ARQUIVO_NC_FALHAS)
+        return sorted(ncs, key=lambda n: (n.get("tecnologia", ""), n.get("cod", "")))
+
+    @staticmethod
     def obter_descricao(cod_alvo):
         """Recebe um código (ex: 'COD001') e devolve a descrição registada
         para esse código, ou string vazia se não existir."""

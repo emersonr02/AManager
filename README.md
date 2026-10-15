@@ -50,3 +50,16 @@ Running the test suite:
 ```bash
 pytest
 ```
+
+## 📸 Screen Captures for Visual Review
+
+`tools/capturar_telas.py` saves a PNG of every screen and dialog, to compare the UI before and after a layout change:
+
+```bash
+python tools/capturar_telas.py --perfil desktop
+python tools/capturar_telas.py --perfil portatil
+```
+
+* `desktop` is a 1300x800 window at scale 1.0; `portatil` simulates a 1366x768 laptop at 125%: the app sees a 1366x768 screen and Windows scaling applies to widgets and windows, so the main window and every dialog size themselves exactly as on a real laptop. That is where actions get pushed off-screen. Without `--perfil`, both run.
+* PNGs go to `capturas/<perfil>/` (git-ignored). Use `--saida <folder>` to keep a "before" set, e.g. `--saida capturas/antes`.
+* The real `data/` is never read or written: the code is copied to a temp folder with fictional data, and each profile runs in its own process. The app windows open on screen for ~25 s per profile, so leave the mouse and keyboard alone until it finishes.
