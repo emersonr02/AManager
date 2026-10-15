@@ -16,3 +16,6 @@ data/*.json
 # subpastas, por isso sem esta regra explícita os JSON dentro de cada
 # pasta de backup ficariam fora do .gitignore e seriam commitados.
 data/backups/
+
+# PNGs gerados por tools/capturar_telas.py (revisão visual da UI).
+capturas/

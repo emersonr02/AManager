@@ -147,6 +147,17 @@ def arquivos_nc(tmp_path, monkeypatch):
     return str(falhas), str(acoes)
 
 
+@pytest.fixture(autouse=True)
+def toasts(monkeypatch):
+    """Captura as notificações não modais (theme.toast) em vez de as desenhar —
+    os testes verificam a mensagem de sucesso por aqui (antes era um
+    messagebox.showinfo modal)."""
+    from gui import theme
+    mensagens = []
+    monkeypatch.setattr(theme, "toast", lambda widget, texto, variante="ok", duracao_ms=3500: mensagens.append(texto))
+    return mensagens
+
+
 @pytest.fixture
 def json_file(tmp_path):
     return str(tmp_path / "dados.json")
@@ -159,9 +170,7 @@ def _aplicar_patches_gui(mp, base_dir):
     (PedidoService/MaquinaService/ProducaoService), e esses não precisam de
     patch nenhum aqui: só quem ainda faz `from config.paths import ARQUIVO_X`
     diretamente é que aparece nesta função."""
-    from gui.dialogs import editar_pedido
-    from gui import producao_tab
-    from services import backup_service, resumo_diario_service, audit_service
+    from services import backup_service, resumo_diario_service, audit_service, template_service
 
     caminhos = {
         "pedidos": base_dir / "pedidos.json",
@@ -169,16 +178,21 @@ def _aplicar_patches_gui(mp, base_dir):
         "maquinas": base_dir / "parque_maquinas.json",
         "manutencoes": base_dir / "manutencoes.json",
         "tarefas_manutencao": base_dir / "tarefas_manutencao.json",
+        "projetos": base_dir / "projetos.json",
+        "materiais": base_dir / "materiais.json",
     }
 
+    # Nenhum módulo de gui/ importa as constantes ARQUIVO_* por nome — tudo passa
+    # pelos services, por isso basta redirecionar os services.
     mp.setattr(pedido_service, "ARQUIVO_PEDIDOS", str(caminhos["pedidos"]))
-    # editar_pedido.py é o único módulo de gui/ que ainda importa esta
-    # constante por nome — pedidos_tab/historico_tab/novo_pedido/fechar_ordem
-    # já passam todos por PedidoService.obter_todos().
-    mp.setattr(editar_pedido, "ARQUIVO_PEDIDOS", str(caminhos["pedidos"]))
-
     mp.setattr(producao_service, "ARQUIVO_LOGS", str(caminhos["producoes"]))
-    mp.setattr(producao_tab, "ARQUIVO_LOGS", str(caminhos["producoes"]))
+    # A app navega até à Configuração (projetos/materiais) e o Painel/Fecho de
+    # ordem leem o catálogo NC — isolados também, para nenhum teste de GUI ler
+    # ou escrever esses ficheiros reais.
+    mp.setattr(projeto_service, "ARQUIVO_PROJETOS", str(caminhos["projetos"]))
+    mp.setattr(material_service, "ARQUIVO_MATERIAIS", str(caminhos["materiais"]))
+    mp.setattr(nc_service, "ARQUIVO_NC_FALHAS", str(base_dir / "nc_falhas.json"))
+    mp.setattr(nc_service, "ARQUIVO_ACOES", str(base_dir / "acoes_corretivas.json"))
 
     mp.setattr(maquina_service, "ARQUIVO_MAQUINAS", str(caminhos["maquinas"]))
 
@@ -196,6 +210,10 @@ def _aplicar_patches_gui(mp, base_dir):
     mp.setattr(backup_service, "BACKUP_DIR", str(pasta_backups))
     mp.setattr(resumo_diario_service.ResumoDiarioService, "_MARCADOR_DIR", str(base_dir / ".amanager"))
     mp.setattr(audit_service, "ARQUIVO_AUDIT_LOG", str(base_dir / "audit_log.json"))
+    # ProducaoTab lista os templates logo na construção, e TemplateService.garantir_arquivo
+    # cria o ficheiro se não existir — sem isto, cada teste da tab criava
+    # data/templates_producao.json real (e o tripwire de sessão falhava).
+    mp.setattr(template_service, "ARQUIVO_TEMPLATES", str(base_dir / "templates_producao.json"))
 
     return {k: str(v) for k, v in caminhos.items()}
 

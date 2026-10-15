@@ -62,10 +62,13 @@ def test_marcar_concluida_regista_historico_e_atualiza_agenda(arquivo_maquinas, 
     tab = ManutencaoTab(ctk_root, None, None)
     tab.tree_agenda.selection_set(tab.tree_agenda.get_children()[0])
 
-    tab.marcar_concluida()
+    tab.marcar_concluida()          # abre o diálogo de registo (com notas)
+    tab.dialogo.ent_notas.insert(0, "Bico trocado")
+    tab.dialogo.confirmar()
 
-    assert len(ManutencaoService.obter_historico()) == 2  # o antigo + o novo registo
-    assert avisos["info"]
+    historico = ManutencaoService.obter_historico()
+    assert len(historico) == 2  # o antigo + o novo registo
+    assert historico[0]["notas"] == "Bico trocado"
     linhas = _linhas(tab.tree_agenda)
     assert linhas[0][5] == "OK"  # acabada de concluir, já não está atrasada
 
@@ -176,10 +179,9 @@ def test_editar_tarefa_guarda_alteracoes(arquivo_maquinas, arquivo_producoes, ar
     tab.tree_tarefas.selection_set(tab.tree_tarefas.get_children()[0])
 
     tab.editar_tarefa_selecionada()
-    top = ctk_root.winfo_toplevel().winfo_children()[-1]
-    entradas = _encontrar_widgets(top, "CTkEntry")
-    botao = _encontrar_widgets(top, "CTkButton")[0]
-    ent_nome = entradas[0]
+    top = tab.dialogo
+    botao = top.btn_acao
+    ent_nome = top.ent_nome
 
     ent_nome.delete(0, "end")
     ent_nome.insert(0, "Nome Novo")
@@ -204,3 +206,35 @@ def test_historico_mostra_nomes_resolvidos(arquivo_maquinas, arquivo_producoes, 
     assert linhas[0][1] == "Limpeza"
     assert linhas[0][3] == "jsilva"
     assert linhas[0][4] == "Tudo ok"
+
+
+def test_agenda_mostra_frequencia_e_vencimento(arquivo_maquinas, arquivo_producoes, arquivo_manutencoes, arquivo_tarefas_manutencao, ctk_root):
+    # Antes só se viam "DIAS"/"HORAS" desde a última vez — não se percebia de
+    # quanto em quanto tempo era a tarefa nem há quanto estava vencida.
+    _criar_maquina()
+    tarefa = ManutencaoService.criar_tarefa(modelo="Bambu Lab X1C", nome="Limpeza", frequencia_dias=10)
+    JSONManager.salvar([{
+        "id": 1, "tarefa_id": tarefa["id"], "maquina_id": "M1",
+        "data_realizacao": _fmt(datetime.now() - timedelta(days=20)), "operador": "a", "notas": "",
+    }], arquivo_manutencoes)
+
+    tab = ManutencaoTab(ctk_root, None, None)
+
+    linha = _linhas(tab.tree_agenda)[0]
+    assert linha[2] == "10 d"          # frequência
+    assert linha[4] == "há 10 d"       # vencida há 10 dias
+
+
+def test_cancelar_registo_nao_grava(arquivo_maquinas, arquivo_producoes, arquivo_manutencoes, arquivo_tarefas_manutencao, ctk_root, avisos):
+    _criar_maquina()
+    ManutencaoService.criar_tarefa(modelo="Bambu Lab X1C", nome="Limpeza", frequencia_dias=10)
+    ProducaoService_criar = __import__("services.producao_service", fromlist=["ProducaoService"]).ProducaoService
+    ProducaoService_criar.criar_producao(tecnologia="FDM", maquina="Printer 1", tempo_estimado="01:00",
+                                         pedidos_vinculados=[], operador="t")
+    tab = ManutencaoTab(ctk_root, None, None)
+    tab.tree_agenda.selection_set(tab.tree_agenda.get_children()[0])
+
+    tab.marcar_concluida()
+    tab.dialogo.cancelar()
+
+    assert ManutencaoService.obter_historico() == []

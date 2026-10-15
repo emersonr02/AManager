@@ -7,10 +7,9 @@ from gui.dialogs.novo_pedido import JanelaNovoPedido, MODELO_EMAIL
 
 
 @pytest.fixture
-def avisos(monkeypatch):
-    chamadas = {"error": [], "info": []}
+def avisos(monkeypatch, toasts):
+    chamadas = {"error": [], "info": toasts}  # sucesso = toast não modal
     monkeypatch.setattr("gui.dialogs.novo_pedido.messagebox.showerror", lambda t, m: chamadas["error"].append(m))
-    monkeypatch.setattr("gui.dialogs.novo_pedido.messagebox.showinfo", lambda t, m: chamadas["info"].append(m))
     return chamadas
 
 
@@ -27,14 +26,17 @@ def janela(gui_arquivos, arquivo_projetos, arquivo_materiais, ctk_root, avisos):
         win.destroy()
 
 
-def _preencher_minimo(win, pn="P1", mat=None, qtd="5"):
+def _preencher_minimo(win, pn="P1", mat=None, qtd="5", tech="FDM"):
+    """Preenche todos os campos obrigatórios. O material por omissão é o primeiro
+    da lista — o teste tem de registar pelo menos um material ANTES de abrir a
+    janela (a lista é lida na construção)."""
     win.cmb_req.set("cliente@x.com")
     win.ent_data.insert(0, "2026-10-01")
     win.cmb_proj.set(win.lista_projetos_fmt[0])
+    win.cmb_tech.set(tech)
     linha = win.linhas_pecas[0]
     linha["pn"].insert(0, pn)
-    if mat:
-        linha["mat"].set(mat)
+    linha["mat"].set(mat or win.lista_materiais_fmt[0])
     linha["qtd"].insert(0, qtd)
 
 
@@ -123,6 +125,7 @@ def test_salvar_peca_com_quantidade_nao_positiva_bloqueia(gui_arquivos, arquivo_
 
 def test_salvar_pedido_valido_cria_e_fecha_janela(gui_arquivos, arquivo_projetos, arquivo_materiais, ctk_root, avisos):
     ProjetoService.criar_projeto("111", "Projeto Teste")
+    MaterialService.criar_material("PLA", "")
     win = JanelaNovoPedido(ctk_root, lambda: None)
     _preencher_minimo(win)
 
@@ -131,15 +134,15 @@ def test_salvar_pedido_valido_cria_e_fecha_janela(gui_arquivos, arquivo_projetos
     pedidos = PedidoService.obter_todos()
     assert len(pedidos) == 1
     assert pedidos[0]["requerente_email"] == "cliente@x.com"
-    # Nota: o combobox de material começa vazio ("") até o utilizador o escolher
-    # explicitamente — mesmo com lista_materiais_fmt == ["N/A"], não há auto-seleção.
-    assert pedidos[0]["pecas"] == [{"pn": "P1", "material": "", "qtd_solicitada": 5, "qtd_produzida": 0}]
+    assert pedidos[0]["tecnologia"] == "FDM"
+    assert pedidos[0]["pecas"] == [{"pn": "P1", "material": "PLA", "qtd_solicitada": 5, "qtd_produzida": 0}]
     assert avisos["info"]
     assert win.winfo_exists() == 0
 
 
 def test_salvar_pedido_chama_callback_de_atualizacao(gui_arquivos, arquivo_projetos, arquivo_materiais, ctk_root, avisos):
     ProjetoService.criar_projeto("111", "Projeto Teste")
+    MaterialService.criar_material("PLA", "")
     chamado = []
     win = JanelaNovoPedido(ctk_root, lambda: chamado.append(True))
     _preencher_minimo(win)
@@ -151,6 +154,7 @@ def test_salvar_pedido_chama_callback_de_atualizacao(gui_arquivos, arquivo_proje
 
 def test_salvar_projeto_sem_separador_usa_id_sem_nome(gui_arquivos, arquivo_projetos, arquivo_materiais, ctk_root, avisos):
     ProjetoService.criar_projeto("999", "")  # nome vazio -> lista_projetos_fmt == ["999"]
+    MaterialService.criar_material("PLA", "")
     win = JanelaNovoPedido(ctk_root, lambda: None)
     _preencher_minimo(win)
 
@@ -209,3 +213,97 @@ def test_obter_requerentes_historico_devolve_emails_unicos_ordenados(gui_arquivo
     win = JanelaNovoPedido(ctk_root, lambda: None)
 
     assert win.obter_requerentes_historico() == ["alfa@x.com", "zeta@x.com"]
+
+
+# --------------------------------------------------------------------------- #
+#  Validação completa (Fase 0): tecnologia, projeto e material obrigatórios,   #
+#  e todos os erros numa só mensagem.                                          #
+# --------------------------------------------------------------------------- #
+
+def test_abre_sem_tecnologia_nem_projeto_nem_material_escolhidos(janela):
+    # Ponto de partida do bug: os combobox readonly começam vazios.
+    assert janela.cmb_tech.get() == ""
+    assert janela.cmb_proj.get() == ""
+    assert janela.linhas_pecas[0]["mat"].get() == ""
+
+
+def test_salvar_sem_tecnologia_bloqueia(gui_arquivos, arquivo_projetos, arquivo_materiais, ctk_root, avisos):
+    # Antes era aceite com tecnologia "" — e o pedido nunca aparecia em Nova
+    # Produção, que filtra os pedidos pela tecnologia.
+    ProjetoService.criar_projeto("111", "Projeto Teste")
+    MaterialService.criar_material("PLA", "")
+    win = JanelaNovoPedido(ctk_root, lambda: None)
+    _preencher_minimo(win)
+    win.cmb_tech.set("")
+
+    win.salvar_pedido()
+
+    assert PedidoService.obter_todos() == []
+    assert "tecnologia" in avisos["error"][0]
+    win.destroy()
+
+
+def test_salvar_sem_projeto_escolhido_bloqueia(gui_arquivos, arquivo_projetos, arquivo_materiais, ctk_root, avisos):
+    ProjetoService.criar_projeto("111", "Projeto Teste")
+    MaterialService.criar_material("PLA", "")
+    win = JanelaNovoPedido(ctk_root, lambda: None)
+    _preencher_minimo(win)
+    win.cmb_proj.set("")
+
+    win.salvar_pedido()
+
+    assert PedidoService.obter_todos() == []
+    assert "projeto" in avisos["error"][0]
+    win.destroy()
+
+
+def test_salvar_peca_sem_material_bloqueia(gui_arquivos, arquivo_projetos, arquivo_materiais, ctk_root, avisos):
+    ProjetoService.criar_projeto("111", "Projeto Teste")
+    MaterialService.criar_material("PLA", "")
+    win = JanelaNovoPedido(ctk_root, lambda: None)
+    _preencher_minimo(win)
+    win.linhas_pecas[0]["mat"].set("")
+
+    win.salvar_pedido()
+
+    assert PedidoService.obter_todos() == []
+    assert "material" in avisos["error"][0]
+    win.destroy()
+
+
+def test_salvar_sem_materiais_registados_indica_onde_os_criar(gui_arquivos, arquivo_projetos, arquivo_materiais, ctk_root, avisos):
+    # Sem materiais, a lista mostra o marcador "N/A" — que não pode valer como material.
+    ProjetoService.criar_projeto("111", "Projeto Teste")
+    win = JanelaNovoPedido(ctk_root, lambda: None)
+    _preencher_minimo(win)  # escolhe lista_materiais_fmt[0] == "N/A"
+
+    win.salvar_pedido()
+
+    assert PedidoService.obter_todos() == []
+    assert "Configuração → Projetos / Materiais" in avisos["error"][0]
+    win.destroy()
+
+
+def test_salvar_mostra_todos_os_erros_numa_so_mensagem(gui_arquivos, arquivo_projetos, arquivo_materiais, ctk_root, avisos):
+    win = JanelaNovoPedido(ctk_root, lambda: None)
+
+    win.salvar_pedido()
+
+    assert len(avisos["error"]) == 1
+    msg = avisos["error"][0]
+    for trecho in ("requerente", "projeto", "tecnologia", "data de entrega", "Part Number", "material", "quantidade"):
+        assert trecho in msg, trecho
+    win.destroy()
+
+
+def test_salvar_aceita_data_dd_mm_aaaa_e_normaliza(gui_arquivos, arquivo_projetos, arquivo_materiais, ctk_root, avisos):
+    ProjetoService.criar_projeto("111", "Projeto Teste")
+    MaterialService.criar_material("PLA", "")
+    win = JanelaNovoPedido(ctk_root, lambda: None)
+    _preencher_minimo(win)
+    win.ent_data.delete(0, "end")
+    win.ent_data.insert(0, "20/09/2026")
+
+    win.salvar_pedido()
+
+    assert PedidoService.obter_todos()[0]["data_entrega"] == "2026-09-20"

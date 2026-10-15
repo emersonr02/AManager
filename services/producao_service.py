@@ -112,11 +112,43 @@ class ProducaoService:
         return "" # Retorna vazio se for a primeira vez
 
     @staticmethod
-    def obter_todos():
-        """Retorna todas as produções ordenadas da mais recente para a mais antiga."""
+    def obter_todos(incluir_anuladas: bool = False):
+        """Retorna as produções ordenadas da mais recente para a mais antiga.
+        Ordens anuladas (ver `anular_producao`) ficam de fora por omissão: não
+        contam para KPIs, análise, manutenção nem resumo do dia."""
         producoes = JSONManager.carregar(ARQUIVO_LOGS)
+        if not incluir_anuladas:
+            producoes = [p for p in producoes if not p.get("anulada")]
         producoes.sort(key=lambda x: int(x.get("id", 0)), reverse=True)
         return producoes
+
+    @staticmethod
+    def anular_producao(id_producao, motivo: str, utilizador: str = None) -> bool:
+        """Anula uma ordem em vez de a apagar: o registo de qualidade fica no
+        ficheiro (rastreabilidade), marcado com quem anulou, quando e porquê, e
+        o evento vai para a trilha de auditoria. Devolve False se não existir."""
+        import os
+        from services.audit_service import AuditService
+
+        quem = utilizador or os.environ.get("USERNAME", "Desconhecido")
+        encontrada = {}
+
+        def _transformar(producoes):
+            for p in producoes:
+                if p.get("id") == id_producao and not p.get("anulada"):
+                    p["anulada"] = True
+                    p["anulada_por"] = quem
+                    p["anulada_em"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    p["motivo_anulacao"] = motivo
+                    encontrada.update(p)
+            return producoes
+
+        JSONManager.atualizar(ARQUIVO_LOGS, _transformar)
+        if not encontrada:
+            return False
+        AuditService.registrar("producao", id_producao, "anulada", False, True, utilizador=quem)
+        AuditService.registrar("producao", id_producao, "motivo_anulacao", "", motivo, utilizador=quem)
+        return True
 
     @staticmethod
     def obter_por_id(id_producao):

@@ -188,3 +188,24 @@ def test_obter_ultimo_lote_sls_devolve_lote_mais_recente_preenchido(arquivo_prod
     _criar(arquivo_producoes, tecnologia="SLS", campos_extra={"lote_po": "LOTE-C"})
 
     assert ProducaoService.obter_ultimo_lote_sls() == "LOTE-C"
+
+
+# ---------- Anular (em vez de apagar) ----------
+
+def test_anular_producao_esconde_da_lista_mas_mantem_no_ficheiro(arquivo_producoes, tmp_path, monkeypatch):
+    from services import audit_service
+    from services.audit_service import AuditService
+    monkeypatch.setattr(audit_service, "ARQUIVO_AUDIT_LOG", str(tmp_path / "audit.json"))
+    p = ProducaoService.criar_producao(tecnologia="FDM", maquina="X1", tempo_estimado="01:00",
+                                       pedidos_vinculados=[], operador="t")
+
+    assert ProducaoService.anular_producao(p["id"], "duplicada", utilizador="qa") is True
+
+    assert ProducaoService.obter_todos() == []
+    guardada = ProducaoService.obter_todos(incluir_anuladas=True)[0]
+    assert (guardada["anulada"], guardada["anulada_por"], guardada["motivo_anulacao"]) == (True, "qa", "duplicada")
+    assert {e["campo"] for e in AuditService.obter_historico("producao", p["id"])} == {"anulada", "motivo_anulacao"}
+
+
+def test_anular_producao_inexistente_devolve_false(arquivo_producoes):
+    assert ProducaoService.anular_producao(999, "x") is False

@@ -1,3 +1,5 @@
+import pytest
+
 from services.maquina_service import MaquinaService
 
 
@@ -46,3 +48,18 @@ def test_obter_ativas_por_tecnologia_filtra_operacionais(arquivo_maquinas):
     ativas_fdm = MaquinaService.obter_ativas_por_tecnologia("FDM")
 
     assert ativas_fdm == ["M1"]
+
+
+@pytest.mark.parametrize("estado,disponivel", [
+    ("Operacional", True),
+    ("Ativa", True),             # default legacy que a UI já assumia
+    ("Manutenção - Parado", False),
+    ("Desativado", False),       # antes passava no filtro da Nova Produção
+    ("Inativa", False),
+])
+def test_esta_disponivel_so_aceita_maquinas_operacionais(estado, disponivel):
+    assert MaquinaService.esta_disponivel({"id": "M1", "estado": estado}) is disponivel
+
+
+def test_esta_disponivel_sem_estado_conta_como_disponivel():
+    assert MaquinaService.esta_disponivel({"id": "M1"}) is True

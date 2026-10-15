@@ -1,215 +1,266 @@
-import customtkinter as ctk
+from datetime import datetime
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import messagebox
+
+import customtkinter as ctk
+
 from services.pedido_service import PedidoService
 from gui.dialogs.novo_pedido import JanelaNovoPedido
 from gui.dialogs.editar_pedido import JanelaEditarPedido
-from gui.dialogs.gestao_projetos_materiais import JanelaGestaoProjetosMateriais
 from gui import theme
 
-_VARIANTE_ESTADO = {
-    "Entregue": "ok", "Concluído": "ok",
-    "Em Andamento": "run",
-    "Cancelado": "bad",
-    "Pendente": "neutral",
+_FILTROS = {
+    "Abertos": ("Pendente", "Em Andamento"),
+    "Concluídos": ("Concluído", "Entregue"),
+    "Cancelados": ("Cancelado",),
+    "Todos": None,
 }
+_ESTADOS_EDITAVEIS = ["Pendente", "Em Andamento", "Concluído", "Entregue"]
+
+
+def _cancelado(p):
+    return p.get("ativo") is False or p.get("estado") == "Cancelado"
 
 
 class PedidosTab:
-    def __init__(self, parent_frame, f_padrao, f_titulo, master_app=None):
+    def __init__(self, parent_frame, f_padrao=None, f_titulo=None, master_app=None):
         self.parent = parent_frame
-        self.f_padrao = f_padrao
-        self.f_titulo = f_titulo
         self.master_app = master_app
-
         self.parent.configure(fg_color=theme.BG)
-
         self.construir_layout()
         self.atualizar_tabela()
 
+    # ------------------------------------------------------------------ #
+    #  LAYOUT                                                              #
+    # ------------------------------------------------------------------ #
     def construir_layout(self):
-        # 1. HEADER
-        theme.page_header(self.parent, "Backlog", "Gestão de Pedidos").pack(fill="x", padx=24, pady=(22, 10))
+        cab = theme.page_header(self.parent, "Backlog", "Pedidos")
+        cab.pack(fill="x", padx=24, pady=(18, 8))
+        theme.button_action(cab.acoes, text="+ Novo pedido", height=34, command=self.abrir_novo_pedido).pack(side="left")
 
-        frm_acoes_header = ctk.CTkFrame(self.parent, fg_color="transparent")
-        frm_acoes_header.pack(fill="x", padx=24, pady=(0, 10))
-        theme.button_action(frm_acoes_header, text="+ Novo Pedido", command=self.abrir_novo_pedido).pack(side="right")
-        theme.button_ghost(frm_acoes_header, text="Gerir Projetos / Materiais", command=self.abrir_gestao_projetos_materiais).pack(side="right", padx=(0, 10))
-
-        # 2. CARDS DE KPI
         frm_kpi = ctk.CTkFrame(self.parent, fg_color="transparent")
-        frm_kpi.pack(fill="x", padx=24, pady=10)
+        frm_kpi.pack(fill="x", padx=19, pady=(4, 8))
+        self.lbl_kpi_total = theme.kpi_card(frm_kpi, "Abertos", "0")
+        self.lbl_kpi_andamento = theme.kpi_card(frm_kpi, "Em andamento", "0", theme.TEAL)
+        self.lbl_kpi_atrasados = theme.kpi_card(frm_kpi, "Atrasados", "0")
+        self.lbl_kpi_entregues = theme.kpi_card(frm_kpi, "Concluídos / entregues", "0")
 
-        self.lbl_kpi_total = theme.kpi_card(frm_kpi, "Total Ativos", "0")
-        self.lbl_kpi_andamento = theme.kpi_card(frm_kpi, "Em Andamento", "0", theme.TEAL)
-        self.lbl_kpi_entregues = theme.kpi_card(frm_kpi, "Entregues", "0", theme.SUCCESS)
+        # Filtros: separadores por estado + pesquisa livre
+        frm_flt = ctk.CTkFrame(self.parent, fg_color="transparent")
+        frm_flt.pack(fill="x", padx=24, pady=(0, 6))
+        self.seg_filtro = theme.segmented(frm_flt, values=list(_FILTROS), command=lambda _: self.atualizar_tabela())
+        self.seg_filtro.set("Abertos")
+        self.seg_filtro.pack(side="left")
+        self.ent_pesquisa = theme.entry(frm_flt, width=280, placeholder_text="Pesquisar código, projeto, requerente…")
+        self.ent_pesquisa.pack(side="right")
+        self.ent_pesquisa.bind("<KeyRelease>", lambda e: self.atualizar_tabela())
 
-        # 3. ÁREA DA TABELA
-        frm_lista = ctk.CTkFrame(self.parent, fg_color=theme.SURFACE, corner_radius=theme.RADIUS_M, border_width=1, border_color=theme.BORDER)
-        frm_lista.pack(fill="both", expand=True, padx=24, pady=(5, 18))
+        # Ações sobre o pedido selecionado (antes só no clique direito)
+        frm_acoes = ctk.CTkFrame(self.parent, fg_color="transparent")
+        frm_acoes.pack(side="bottom", fill="x", padx=24, pady=(0, 16))
+        self.btn_editar = theme.button_primary(frm_acoes, text="Editar pedido", height=36, width=130, command=self.abrir_edicao)
+        self.btn_editar.pack(side="left", padx=(0, 8))
+        self.btn_estado = theme.button_ghost(frm_acoes, text="Alterar estado", height=36, width=130, command=self.abrir_dialogo_estado)
+        self.btn_estado.pack(side="left", padx=(0, 8))
+        self.btn_email = theme.button_ghost(frm_acoes, text="Email de resposta", height=36, width=150, command=self.abrir_email_resposta)
+        self.btn_email.pack(side="left")
+        self.btn_cancelar = theme.button_danger(frm_acoes, text="Cancelar pedido", height=36, width=140, command=self.soft_delete_pedido)
+        self.btn_cancelar.pack(side="right")
 
-        # TABELA
-        cols = ("id", "data", "requerente", "projeto", "status", "tech")
-        self.tree_pedidos = ttk.Treeview(frm_lista, columns=cols, show="headings", style="Custom.Treeview")
-
-        cabecalhos = ["ID", "DATA", "REQUERENTE", "PROJETO", "STATUS", "TECH"]
-        anchors = {"id": "center", "data": "center", "requerente": "w", "projeto": "w", "status": "w", "tech": "center"}
-        for c, h in zip(cols, cabecalhos):
-            self.tree_pedidos.heading(c, text=h, anchor=anchors[c])
-
-        self.tree_pedidos.column("id", width=95, anchor="center")
-        self.tree_pedidos.column("data", width=90, anchor="center")
-        self.tree_pedidos.column("requerente", width=180, anchor="w")
-        self.tree_pedidos.column("projeto", width=220, anchor="w")
-        self.tree_pedidos.column("status", width=130, anchor="w")
-        self.tree_pedidos.column("tech", width=70, anchor="center")
-
-        # EVENTOS: Duplo clique para editar / Clique direito para menu CRUD
+        frm_lista = theme.card(self.parent)
+        frm_lista.pack(fill="both", expand=True, padx=24, pady=(0, 8))
+        frm_tab, self.tree_pedidos = theme.tabela(frm_lista, [
+            ("id", "Pedido", 96, "w", False),
+            ("prazo", "Prazo", 120, "w", False),
+            ("projeto", "Projeto", 220, "w"),
+            ("requerente", "Requerente", 190, "w"),
+            ("tech", "Tecnologia", 90, "center", False),
+            ("progresso", "Progresso", 110, "center", False),
+            ("status", "Estado", 120, "w", False),
+        ])
+        frm_tab.pack(fill="both", expand=True, padx=8, pady=8)
         self.tree_pedidos.bind("<Double-1>", self.abrir_edicao)
         self.tree_pedidos.bind("<Button-3>", self.mostrar_menu_contexto)
+        self._atualizar_botoes = theme.ligar_a_selecao(
+            self.tree_pedidos, [self.btn_editar, self.btn_estado, self.btn_email, self.btn_cancelar])
 
-        sb_ped = ttk.Scrollbar(frm_lista, orient="vertical", command=self.tree_pedidos.yview)
-        self.tree_pedidos.configure(yscrollcommand=sb_ped.set)
-        sb_ped.pack(fill="y", side="right", pady=10, padx=(0, 5))
-        self.tree_pedidos.pack(fill="both", expand=True, side="left", padx=10, pady=10)
-
-        self.configurar_estilo_tabela()
-
-    def configurar_estilo_tabela(self):
-        style = ttk.Style()
-        style.theme_use("default")
-        style.configure("Custom.Treeview", background=theme.SURFACE[0], foreground=theme.TEXT[0], rowheight=30, fieldbackground=theme.SURFACE[0], borderwidth=0)
-        style.configure("Custom.Treeview.Heading", background=theme.SURFACE_ALT[0], foreground=theme.TEXT_MUTED[0], borderwidth=0)
-        style.map("Custom.Treeview", background=[("selected", theme.ACCENT[0])], foreground=[("selected", "white")])
-        # Tags nativas para colorir o texto por estado (substituem as pills flutuantes)
-        self.tree_pedidos.tag_configure("tag_ok",      foreground=theme.SUCCESS[0])
-        self.tree_pedidos.tag_configure("tag_run",     foreground=theme.TEAL[0])
-        self.tree_pedidos.tag_configure("tag_bad",     foreground=theme.CRITICAL[0])
-        self.tree_pedidos.tag_configure("tag_neutral", foreground=theme.TEXT_MUTED[0])
+    # ------------------------------------------------------------------ #
+    #  DADOS                                                               #
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _texto_prazo(pedido, dias):
+        data = PedidoService.normalizar_data_entrega(pedido.get("data_entrega", ""))
+        if not data:
+            return "—"
+        data_fmt = datetime.strptime(data, "%Y-%m-%d").strftime("%d/%m/%Y")
+        if pedido.get("estado") not in PedidoService.ESTADOS_ABERTOS or dias is None:
+            return data_fmt
+        if dias < 0:
+            return f"{data_fmt} (atrasado)"
+        if dias == 0:
+            return f"{data_fmt} (hoje)"
+        if dias == 1:
+            return f"{data_fmt} (amanhã)"
+        if dias <= 2:
+            return f"{data_fmt} (em {dias} dias)"
+        return data_fmt
 
     def atualizar_tabela(self):
-        for i in self.tree_pedidos.get_children(): self.tree_pedidos.delete(i)
-        
+        for i in self.tree_pedidos.get_children():
+            self.tree_pedidos.delete(i)
+
         pedidos = PedidoService.obter_todos()
-        
-        total_ativos, andamento, entregues = 0, 0, 0
+        filtro = _FILTROS.get(self.seg_filtro.get())
+        termo = self.ent_pesquisa.get().strip().lower()
 
+        abertos = andamento = atrasados = fechados = 0
+        linhas = []
         for p in pedidos:
-            # SOFT DELETE: Ignora pedidos marcados como inativos ou cancelados
-            if p.get("ativo") is False or p.get("estado") == "Cancelado":
+            estado = "Cancelado" if _cancelado(p) else p.get("estado", "Pendente")
+            dias = PedidoService.dias_ate_prazo(p)
+            aberto = estado in PedidoService.ESTADOS_ABERTOS
+            # KPIs sobre todos os pedidos (não dependem do separador escolhido)
+            if aberto:
+                abertos += 1
+                if estado == "Em Andamento":
+                    andamento += 1
+                if dias is not None and dias < 0:
+                    atrasados += 1
+            elif estado in PedidoService.ESTADOS_FECHADOS:
+                fechados += 1
+
+            if filtro is not None and estado not in filtro:
                 continue
+            projeto = f"{p.get('nr_projeto', '')} - {p.get('nome_projeto', '')}" if p.get("nome_projeto") else str(p.get("nr_projeto", ""))
+            codigo = PedidoService.formatar_codigo(p.get("id"))
+            if termo and termo not in " ".join([codigo, projeto, str(p.get("requerente_email", ""))]).lower():
+                continue
+            feitas, total = PedidoService.progresso(p)
+            if estado == "Cancelado":
+                tag = "tag_muted"
+            elif aberto and dias is not None and dias < 0:
+                tag = "tag_bad"
+            elif aberto and dias is not None and dias <= 2:
+                tag = "tag_warn"
+            elif estado == "Em Andamento":
+                tag = "tag_run"
+            else:
+                tag = "tag_neutral"
+            linhas.append(((dias if (aberto and dias is not None) else 10**6), -int(p.get("id", 0)), (
+                codigo, self._texto_prazo(p, dias), projeto, p.get("requerente_email", ""), p.get("tecnologia", "") or "—",
+                f"{feitas}/{total}" if total else "—", estado,
+            ), tag))
 
-            status = p.get("estado", "Pendente")
+        # Abertos: o prazo mais próximo primeiro; restantes: mais recentes primeiro
+        if self.seg_filtro.get() == "Abertos":
+            linhas.sort(key=lambda l: (l[0], l[1]))
+        for _, _, valores, tag in linhas:
+            self.tree_pedidos.insert("", "end", tags=(tag,), values=valores)
 
-            total_ativos += 1
-            if status == "Em Andamento": andamento += 1
-            if status in ["Entregue", "Concluído"]: entregues += 1
-
-            tag_linha = "tag_" + _VARIANTE_ESTADO.get(status, "neutral")
-            self.tree_pedidos.insert("", "end", tags=(tag_linha,), values=(
-                PedidoService.formatar_codigo(p.get("id")), p.get("data_pedido"), p.get("requerente_email"),
-                p.get("nr_projeto"), status, p.get("tecnologia")
-            ))
-
-        self.lbl_kpi_total.configure(text=str(total_ativos))
+        self.lbl_kpi_total.configure(text=str(abertos))
         self.lbl_kpi_andamento.configure(text=str(andamento))
-        self.lbl_kpi_entregues.configure(text=str(entregues))
+        self.lbl_kpi_atrasados.configure(text=str(atrasados), text_color=theme.CRITICAL if atrasados else theme.TEXT)
+        self.lbl_kpi_entregues.configure(text=str(fechados))
+        self._atualizar_botoes()
 
+    def _pedido_selecionado(self):
+        sel = self.tree_pedidos.selection()
+        if not sel:
+            return None
+        return PedidoService.obter_por_id(PedidoService.extrair_id(self.tree_pedidos.item(sel[0])["values"][0]))
+
+    # ------------------------------------------------------------------ #
+    #  AÇÕES                                                               #
+    # ------------------------------------------------------------------ #
     def mostrar_menu_contexto(self, event):
         item = self.tree_pedidos.identify_row(event.y)
         if item:
             self.tree_pedidos.selection_set(item)
             menu = tk.Menu(self.parent, tearoff=0, font=("Segoe UI", 10))
-            menu.add_command(label="✏️ Editar Pedido", command=self.abrir_edicao)
-            menu.add_command(label="🔄 Alterar Estado", command=self.abrir_dialogo_estado)
-            menu.add_command(label="📧 Copiar Email de Resposta", command=self.abrir_email_resposta)
+            menu.add_command(label="Editar pedido", command=self.abrir_edicao)
+            menu.add_command(label="Alterar estado", command=self.abrir_dialogo_estado)
+            menu.add_command(label="Email de resposta", command=self.abrir_email_resposta)
             menu.add_separator()
-            menu.add_command(label="🗑️ Eliminar (Soft Delete)", command=self.soft_delete_pedido)
+            menu.add_command(label="Cancelar pedido", command=self.soft_delete_pedido)
             menu.post(event.x_root, event.y_root)
-
-    def abrir_email_resposta(self):
-        """Gera um texto de resposta pronto a copiar — nunca envia nada sozinho."""
-        sel = self.tree_pedidos.selection()
-        if not sel: return
-        vals = self.tree_pedidos.item(sel[0])['values']
-        codigo, requerente, estado = vals[0], vals[2], vals[4]
-
-        texto = (
-            "Bom dia,\n\n"
-            f"O seu pedido de impressão ID: {codigo} está: {estado}.\n\n"
-            "Qualquer dúvida, estamos disponíveis.\n\n"
-        )
-
-        top = ctk.CTkToplevel(self.parent.winfo_toplevel())
-        top.title(f"Email de Resposta - {codigo}")
-        top.geometry("480x360")
-        top.configure(fg_color=theme.BG)
-        top.transient(self.parent.winfo_toplevel())
-        top.grab_set()
-
-        ctk.CTkLabel(top, text=f"Resposta para {requerente}", font=theme.font_display(14), text_color=theme.ACCENT).pack(pady=(15, 2), padx=20, anchor="w")
-        ctk.CTkLabel(top, text="Pode editar o texto antes de copiar.", font=theme.font_body(11), text_color=theme.TEXT_MUTED).pack(padx=20, anchor="w")
-
-        txt_email = ctk.CTkTextbox(top, width=440, height=220, fg_color=theme.SURFACE_ALT, text_color=theme.TEXT, border_color=theme.BORDER, border_width=1)
-        txt_email.pack(padx=20, pady=10, fill="both", expand=True)
-        txt_email.insert("1.0", texto)
-
-        def copiar():
-            top.clipboard_clear()
-            top.clipboard_append(txt_email.get("1.0", tk.END).strip())
-            top.update()
-            messagebox.showinfo("Copiado", "Texto copiado para a área de transferência.")
-
-        theme.button_primary(top, text="Copiar para a Área de Transferência", command=copiar).pack(pady=(0, 15), padx=20, fill="x")
 
     def abrir_novo_pedido(self):
         JanelaNovoPedido(self.parent.winfo_toplevel(), self.atualizar_tabela)
 
-    def abrir_gestao_projetos_materiais(self):
-        JanelaGestaoProjetosMateriais(self.parent.winfo_toplevel())
-
     def abrir_edicao(self, event=None):
-        sel = self.tree_pedidos.selection()
-        if not sel: return
-        id_ped = PedidoService.extrair_id(self.tree_pedidos.item(sel[0])['values'][0])
-
-        pedido = PedidoService.obter_por_id(id_ped)
+        pedido = self._pedido_selecionado()
         if pedido:
             JanelaEditarPedido(self.parent.winfo_toplevel(), pedido, self.atualizar_tabela)
 
     def abrir_dialogo_estado(self):
-        sel = self.tree_pedidos.selection()
-        if not sel: return
-        codigo = self.tree_pedidos.item(sel[0])['values'][0]
-        id_ped = PedidoService.extrair_id(codigo)
-        status_atual = self.tree_pedidos.item(sel[0])['values'][4]
+        pedido = self._pedido_selecionado()
+        if pedido:
+            self.dialogo = JanelaAlterarEstado(self.parent.winfo_toplevel(), pedido, self.atualizar_tabela)
 
-        top = ctk.CTkToplevel(self.parent.winfo_toplevel())
-        top.title(f"Alterar Estado - Pedido #{codigo}")
-        top.geometry("360x210")
-        top.configure(fg_color=theme.BG)
-        top.transient(self.parent.winfo_toplevel())
-        top.grab_set()
-
-        ctk.CTkLabel(top, text="Novo Estado do Pedido:", font=theme.font_body(12, "bold"), text_color=theme.TEXT).pack(pady=(20, 10))
-
-        cmb_estado = theme.combobox(top, values=["Pendente", "Em Andamento", "Concluído", "Entregue"], width=200, state="readonly")
-        cmb_estado.set(status_atual)
-        cmb_estado.pack(pady=10)
-
-        def guardar_estado():
-            PedidoService.alterar_estado(id_ped, cmb_estado.get())
-            self.atualizar_tabela()
-            top.destroy()
-
-        theme.button_primary(top, text="GUARDAR", command=guardar_estado).pack(pady=10)
+    def abrir_email_resposta(self):
+        pedido = self._pedido_selecionado()
+        if pedido:
+            self.dialogo = JanelaEmailResposta(self.parent.winfo_toplevel(), pedido)
 
     def soft_delete_pedido(self):
-        sel = self.tree_pedidos.selection()
-        if not sel: return
-        codigo = self.tree_pedidos.item(sel[0])['values'][0]
-        id_ped = PedidoService.extrair_id(codigo)
-
-        if messagebox.askyesno("Confirmar Eliminação", f"Tem a certeza que deseja eliminar o Pedido #{codigo}?\n(O registo será mantido na base de dados por segurança)."):
-            PedidoService.eliminar_pedido(id_ped)
+        pedido = self._pedido_selecionado()
+        if not pedido:
+            return
+        codigo = PedidoService.formatar_codigo(pedido.get("id"))
+        if messagebox.askyesno("Cancelar pedido",
+                               f"Cancelar o pedido {codigo}?\n\nDeixa de aparecer nos pedidos abertos; "
+                               "o registo fica guardado no separador Cancelados."):
+            PedidoService.eliminar_pedido(pedido.get("id"))
+            theme.toast(self.parent, f"Pedido {codigo} cancelado.", "info")
             self.atualizar_tabela()
+
+
+class JanelaAlterarEstado(theme.Dialogo):
+    def __init__(self, parent, pedido, ao_guardar):
+        self.pedido = pedido
+        self._ao_guardar = ao_guardar
+        codigo = PedidoService.formatar_codigo(pedido.get("id"))
+        feitas, total = PedidoService.progresso(pedido)
+        sugerido = PedidoService.estado_sugerido(pedido)
+        subtitulo = f"Progresso: {feitas}/{total} unidades produzidas." if total else ""
+        if sugerido != pedido.get("estado"):
+            subtitulo += f" Estado sugerido pelo progresso: {sugerido}."
+        super().__init__(parent, f"Alterar estado de {codigo}", largura=440, altura=300, scroll=False,
+                         subtitulo=subtitulo.strip())
+        theme.rotulo_campo(self.corpo, "Novo estado").pack(anchor="w", pady=(8, 2))
+        self.cmb_estado = theme.combobox(self.corpo, values=_ESTADOS_EDITAVEIS, state="readonly")
+        self.cmb_estado.set(pedido.get("estado", "Pendente"))
+        self.cmb_estado.pack(fill="x")
+
+    def confirmar(self):
+        PedidoService.alterar_estado(self.pedido.get("id"), self.cmb_estado.get())
+        theme.toast(self, f"{PedidoService.formatar_codigo(self.pedido.get('id'))}: estado alterado para {self.cmb_estado.get()}.")
+        self._ao_guardar()
+        self.destroy()
+
+
+class JanelaEmailResposta(theme.Dialogo):
+    """Gera um texto de resposta pronto a copiar — nunca envia nada sozinho."""
+
+    def __init__(self, parent, pedido):
+        codigo = PedidoService.formatar_codigo(pedido.get("id"))
+        super().__init__(parent, f"Email de resposta — {codigo}", largura=520, altura=420, texto_acao="Copiar texto",
+                         scroll=False, subtitulo=f"Para {pedido.get('requerente_email', '')}. Pode editar antes de copiar.")
+        feitas, total = PedidoService.progresso(pedido)
+        progresso = f" ({feitas} de {total} unidades produzidas)" if total else ""
+        texto = (
+            "Bom dia,\n\n"
+            f"O seu pedido de impressão {codigo} (projeto {pedido.get('nr_projeto', '')}) "
+            f"está: {pedido.get('estado', 'Pendente')}{progresso}.\n\n"
+            "Qualquer dúvida, estamos disponíveis.\n"
+        )
+        self.txt_email = ctk.CTkTextbox(self.corpo, fg_color=theme.SURFACE, text_color=theme.TEXT,
+                                        border_color=theme.BORDER, border_width=1, font=theme.font_body(13))
+        self.txt_email.pack(fill="both", expand=True)
+        self.txt_email.insert("1.0", texto)
+
+    def confirmar(self):
+        self.clipboard_clear()
+        self.clipboard_append(self.txt_email.get("1.0", tk.END).strip())
+        theme.toast(self, "Texto copiado para a área de transferência.", "info")
+        self.destroy()

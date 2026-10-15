@@ -22,6 +22,141 @@ class PedidoService:
         digitos = re.sub(r"\D", "", str(codigo))
         return int(digitos) if digitos else None
 
+    TECNOLOGIAS = ("FDM", "SLA", "SLS")
+
+    @staticmethod
+    def normalizar_data_entrega(data_str: str):
+        """Aceita AAAA-MM-DD, DD/MM/AAAA ou DD-MM-AAAA e devolve AAAA-MM-DD,
+        ou None se a data não for válida."""
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+            try:
+                return datetime.strptime((data_str or "").strip(), fmt).strftime("%Y-%m-%d")
+            except ValueError:
+                continue
+        return None
+
+    @staticmethod
+    def validar_dados_pedido(requerente: str, projeto: str, tecnologia: str,
+                             data_entrega: str, pecas: list) -> list:
+        """Valida os campos de um pedido antes de o criar/editar e devolve TODOS
+        os erros encontrados (lista vazia = válido), para a UI os mostrar de uma
+        vez em vez de um popup por campo.
+
+        pecas: [{"pn": str, "material": str, "qtd": str}] tal como vêm da UI.
+        Tecnologia e material são obrigatórios: um pedido sem tecnologia nunca
+        aparece na seleção de Nova Produção (que filtra por tecnologia), e o
+        material é o que permite agrupar pedidos numa mesma produção."""
+        erros = []
+        if not (requerente or "").strip():
+            erros.append("Indique o requerente.")
+        if not (projeto or "").strip():
+            erros.append("Escolha o projeto.")
+        if tecnologia not in PedidoService.TECNOLOGIAS:
+            erros.append("Escolha a tecnologia (FDM, SLA ou SLS).")
+        if not (data_entrega or "").strip():
+            erros.append("Indique a data de entrega.")
+        elif PedidoService.normalizar_data_entrega(data_entrega) is None:
+            erros.append("Data de entrega inválida — use AAAA-MM-DD ou DD/MM/AAAA.")
+
+        if not pecas:
+            erros.append("O pedido deve conter pelo menos uma peça.")
+        for i, peca in enumerate(pecas, start=1):
+            pn = (peca.get("pn") or "").strip()
+            nome = f"'{pn}'" if pn else f"da linha {i}"
+            qtd = (peca.get("qtd") or "").strip()
+            if not pn:
+                erros.append(f"Peça da linha {i}: falta o Part Number.")
+            if not (peca.get("material") or "").strip():
+                erros.append(f"Peça {nome}: escolha o material.")
+            if not qtd.isdigit() or int(qtd) <= 0:
+                erros.append(f"Peça {nome}: a quantidade tem de ser um número inteiro maior que zero.")
+        return erros
+
+    ESTADOS_ABERTOS = ("Pendente", "Em Andamento")
+    ESTADOS_FECHADOS = ("Concluído", "Entregue")
+
+    @staticmethod
+    def progresso(pedido: dict) -> tuple:
+        """(unidades produzidas, unidades pedidas) somando todas as peças.
+        `qtd_produzida` é atualizada ao fechar ordens (`registar_pecas_produzidas`)."""
+        feitas = total = 0
+        for peca in pedido.get("pecas", []):
+            try:
+                pedida = int(peca.get("qtd_solicitada", 0) or 0)
+                produzida = int(peca.get("qtd_produzida", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            total += pedida
+            feitas += min(produzida, pedida)
+        return feitas, total
+
+    @staticmethod
+    def estado_sugerido(pedido: dict) -> str:
+        """Estado que o progresso das peças sugere: Concluído quando todas as
+        peças estão produzidas, Em Andamento quando há algo feito ou ordens
+        vinculadas. Nunca sugere recuar um pedido já Entregue."""
+        estado = pedido.get("estado", "Pendente")
+        if estado == "Entregue":
+            return estado
+        feitas, total = PedidoService.progresso(pedido)
+        if total and feitas >= total:
+            return "Concluído"
+        if feitas or pedido.get("producoes_vinculadas"):
+            return "Em Andamento"
+        return estado
+
+    @staticmethod
+    def dias_ate_prazo(pedido: dict, hoje=None):
+        """Dias até à data de entrega (negativo = atrasado), ou None sem data válida."""
+        data = PedidoService.normalizar_data_entrega(pedido.get("data_entrega", ""))
+        if not data:
+            return None
+        hoje = hoje or datetime.now().date()
+        return (datetime.strptime(data, "%Y-%m-%d").date() - hoje).days
+
+    @staticmethod
+    def registar_pecas_produzidas(chaves_conformes: list) -> list:
+        """Fecho do ciclo ordem → pedido: cada chave "id_pedido:pn:índice" (as
+        mesmas do controlo de qualidade por peça no fecho da ordem) marca essa
+        linha de peça como totalmente produzida.
+
+        Devolve os pedidos alterados (já com `qtd_produzida` atualizada), para a
+        UI propor o estado sugerido a cada um."""
+        por_pedido = {}
+        for chave in chaves_conformes:
+            partes = str(chave).split(":")
+            if len(partes) < 3:
+                continue
+            try:
+                por_pedido.setdefault(int(partes[0]), set()).add(int(partes[-1]))
+            except ValueError:
+                continue
+        if not por_pedido:
+            return []
+
+        hoje = datetime.now().strftime("%Y-%m-%d")
+        alterados = []
+
+        def _transformar(pedidos):
+            for p in pedidos:
+                indices = por_pedido.get(p.get("id"))
+                if not indices:
+                    continue
+                mudou = False
+                for idx, peca in enumerate(p.get("pecas", [])):
+                    if idx in indices:
+                        pedida = int(peca.get("qtd_solicitada", 0) or 0)
+                        if int(peca.get("qtd_produzida", 0) or 0) < pedida:
+                            peca["qtd_produzida"] = pedida
+                            mudou = True
+                if mudou:
+                    p["data_atualizacao"] = hoje
+                    alterados.append(dict(p))
+            return pedidos
+
+        JSONManager.atualizar(ARQUIVO_PEDIDOS, _transformar)
+        return alterados
+
     @staticmethod
     def obter_todos():
         """Retorna todos os pedidos ordenados do mais recente para o mais antigo."""

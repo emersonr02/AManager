@@ -70,6 +70,7 @@ def test_gravar_grava_modelo_informado(arquivo_maquinas, ctk_root, avisos):
     win = JanelaLogisticaMaquina(ctk_root, None, lambda: None, None, None)
     win.ent_id.insert(0, "M1")
     win.ent_nome.insert(0, "Printer")
+    win.cmb_tech.set("FDM")
     win.ent_modelo.insert(0, "Bambu Lab X1C")
 
     win.gravar()
@@ -81,6 +82,7 @@ def test_gravar_notas_vazias_usa_ok_por_omissao(arquivo_maquinas, ctk_root, avis
     win = JanelaLogisticaMaquina(ctk_root, None, lambda: None, None, None)
     win.ent_id.insert(0, "M1")
     win.ent_nome.insert(0, "Printer")
+    win.cmb_tech.set("FDM")
     win.ent_notas.delete(0, "end")  # limpa o "OK" pré-preenchido
 
     win.gravar()
@@ -103,7 +105,7 @@ def test_gravar_edicao_atualiza_sem_duplicar(arquivo_maquinas, ctk_root, avisos)
     assert maquinas[0]["nome"] == "Printer 1 Renomeada"
 
 
-def test_remover_com_confirmacao_apaga_ativo(arquivo_maquinas, ctk_root, avisos):
+def test_remover_com_confirmacao_apaga_ativo(arquivo_maquinas, arquivo_producoes, ctk_root, avisos):
     MaquinaService.salvar_maquina(mid="M1", nome="Printer 1", tech="FDM", estado="Operacional", manutencao="OK")
     dados = MaquinaService.obter_todas()[0]
     chamado = []
@@ -117,7 +119,7 @@ def test_remover_com_confirmacao_apaga_ativo(arquivo_maquinas, ctk_root, avisos)
     assert win.winfo_exists() == 0
 
 
-def test_remover_sem_confirmacao_mantem_ativo(arquivo_maquinas, ctk_root, avisos):
+def test_remover_sem_confirmacao_mantem_ativo(arquivo_maquinas, arquivo_producoes, ctk_root, avisos):
     MaquinaService.salvar_maquina(mid="M1", nome="Printer 1", tech="FDM", estado="Operacional", manutencao="OK")
     dados = MaquinaService.obter_todas()[0]
     win = JanelaLogisticaMaquina(ctk_root, dados, lambda: None, None, None)
@@ -127,4 +129,55 @@ def test_remover_sem_confirmacao_mantem_ativo(arquivo_maquinas, ctk_root, avisos
 
     assert len(MaquinaService.obter_todas()) == 1
     assert win.winfo_exists() == 1
+    win.destroy()
+
+
+def _botoes(container):
+    import customtkinter as ctk
+    encontrados = []
+    for w in container.winfo_children():
+        if isinstance(w, ctk.CTkButton):
+            encontrados.append(w)
+        encontrados.extend(_botoes(w))
+    return encontrados
+
+
+def test_botoes_gravar_e_eliminar_ficam_no_rodape_fixo(arquivo_maquinas, ctk_root, avisos):
+    # Com 420x600 fixo e não redimensionável, o GRAVAR ficava abaixo da janela.
+    MaquinaService.salvar_maquina(mid="M1", nome="Printer 1", tech="FDM", estado="Operacional", manutencao="OK")
+    win = JanelaLogisticaMaquina(ctk_root, MaquinaService.obter_todas()[0], lambda: None, None, None)
+
+    for botao in (win.btn_gravar, win.btn_remover):
+        w = botao
+        while w is not None and w is not win.rodape:
+            w = w.master
+        assert w is win.rodape and win.rodape.pack_info()["side"] == "bottom"
+    assert win.resizable() == (False, True)
+    win.destroy()
+
+
+def test_gravar_sem_tecnologia_bloqueia(arquivo_maquinas, ctk_root, avisos):
+    # Uma máquina sem tecnologia nunca aparecia em Nova ordem.
+    win = JanelaLogisticaMaquina(ctk_root, None, lambda: None, None, None)
+    win.ent_id.insert(0, "M1")
+    win.ent_nome.insert(0, "Printer")
+
+    win.gravar()
+
+    assert avisos["warning"]
+    assert MaquinaService.obter_todas() == []
+    win.destroy()
+
+
+def test_eliminar_maquina_com_historico_e_bloqueado(arquivo_maquinas, arquivo_producoes, ctk_root, avisos):
+    from services.producao_service import ProducaoService
+    MaquinaService.salvar_maquina(mid="M1", nome="Printer 1", tech="FDM", estado="Operacional", manutencao="OK")
+    ProducaoService.criar_producao(tecnologia="FDM", maquina="Printer 1", tempo_estimado="01:00",
+                                   pedidos_vinculados=[], operador="t")
+    win = JanelaLogisticaMaquina(ctk_root, MaquinaService.obter_todas()[0], lambda: None, None, None)
+
+    win.remover()
+
+    assert avisos["warning"]  # explica que deve usar "Desativado"
+    assert len(MaquinaService.obter_todas()) == 1
     win.destroy()

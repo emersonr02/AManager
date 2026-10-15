@@ -13,6 +13,7 @@ def avisos(monkeypatch):
     chamadas = {"warning": [], "info": [], "error": []}
     monkeypatch.setattr("gui.producao_tab.messagebox.showwarning", lambda titulo, msg: chamadas["warning"].append(msg))
     monkeypatch.setattr("gui.producao_tab.messagebox.showinfo", lambda titulo, msg: chamadas["info"].append(msg))
+    monkeypatch.setattr("gui.theme.toast", lambda w, texto, *a, **k: chamadas["info"].append(texto))
     monkeypatch.setattr("gui.producao_tab.messagebox.showerror", lambda titulo, msg: chamadas["error"].append(msg))
     return chamadas
 
@@ -304,9 +305,84 @@ def test_confirmar_selecao_atualiza_pedidos_vinculados_e_texto(gui_arquivos, ctk
     checks[pedido["id"]]["var"].set(True)
     checks[pedido["id"]]["widget"].cget("command")()
 
-    botao_confirmar = [w for w in top.winfo_children() if type(w).__name__ == "CTkButton"][-1]
-    botao_confirmar.cget("command")()
+    top.btn_acao.cget("command")()
 
     assert tab.pedidos_vinculados == [pedido["id"]]
     assert PedidoService.formatar_codigo(pedido["id"]) in tab.ent_pedidos_sel.get()
     assert top.winfo_exists() == 0
+
+
+# ---------- Fase 0: máquinas oferecidas e botão sempre visível ----------
+
+def test_maquinas_desativadas_ou_paradas_nao_sao_oferecidas(gui_arquivos, ctk_root):
+    _criar_maquina(gui_arquivos, mid="M1", nome="Operacional 1")
+    _criar_maquina(gui_arquivos, mid="M2", nome="Antiga", estado="Desativado")
+    _criar_maquina(gui_arquivos, mid="M3", nome="Em reparação", estado="Manutenção - Parado")
+
+    tab = ProducaoTab(ctk_root, None, None)
+
+    assert list(tab.cmb_maq.cget("values")) == ["Operacional 1"]
+
+
+def test_botao_iniciar_fica_num_rodape_fixo_fora_da_area_de_scroll(gui_arquivos, ctk_root):
+    # Com SLS, o formulário não cabia num portátil a 125% e o botão ficava fora
+    # do ecrã. O botão vive agora num rodapé empacotado com side="bottom"
+    # (reservado antes do corpo scrollável) — e não muda com a tecnologia.
+    tab = ProducaoTab(ctk_root, None, None)
+
+    for tech in ("FDM", "SLA", "SLS"):
+        tab.ao_mudar_tecnologia(tech)
+        assert tab.btn_salvar.winfo_manager() == "pack"
+        assert tab.btn_salvar.master.pack_info()["side"] == "bottom"  # o cartão-rodapé
+
+
+# ---------- Fase 2: rodapé diz o que falta, botão só ativo quando pronto ----------
+
+def test_rodape_lista_o_que_falta_e_desativa_o_botao(gui_arquivos, ctk_root):
+    _criar_maquina(gui_arquivos)
+    tab = ProducaoTab(ctk_root, None, None)
+
+    falta = tab.lbl_falta.cget("text")
+    for trecho in ("pedidos", "tempo", "quantidade", "checklist (0/3)"):
+        assert trecho in falta
+    assert tab.btn_salvar.cget("state") == "disabled"
+
+
+def test_botao_fica_ativo_quando_tudo_preenchido(gui_arquivos, ctk_root, avisos):
+    tab, _ = _tab_fdm_pronta(gui_arquivos, ctk_root, avisos)
+    tab.ent_quant.insert(0, "150")
+    for var in tab.fdm_vars.values():
+        var.set(True)
+
+    tab._atualizar_estado()
+
+    assert tab.btn_salvar.cget("state") == "normal"
+    assert "pronto" in tab.lbl_falta.cget("text")
+
+
+def test_unidade_da_quantidade_segue_a_tecnologia(gui_arquivos, ctk_root):
+    tab = ProducaoTab(ctk_root, None, None)
+    assert "(G)" in tab.lbl_quant.cget("text")
+    tab.ao_mudar_tecnologia("SLA")
+    assert "(ML)" in tab.lbl_quant.cget("text")
+
+
+def test_resumo_mostra_pedidos_selecionados(gui_arquivos, ctk_root):
+    pedido = _criar_pedido(gui_arquivos)
+    tab = ProducaoTab(ctk_root, None, None)
+
+    tab._definir_pedidos([pedido["id"]])
+
+    textos = [w.cget("text") for bloco in tab.frm_resumo.winfo_children() for w in bloco.winfo_children()
+              if type(w).__name__ == "CTkLabel"]
+    assert any("Projeto A" in t for t in textos)
+
+
+def test_preselecionar_escolhe_tecnologia_e_maquina(gui_arquivos, ctk_root):
+    _criar_maquina(gui_arquivos, mid="S1", nome="SLS 1", tech="SLS")
+    tab = ProducaoTab(ctk_root, None, None)
+
+    tab.preselecionar("SLS", "SLS 1")
+
+    assert tab.cmb_tech.get() == "SLS"
+    assert tab.cmb_maq.get() == "SLS 1"

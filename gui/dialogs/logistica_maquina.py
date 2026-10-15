@@ -1,111 +1,113 @@
-import customtkinter as ctk
 from tkinter import messagebox
+
+import customtkinter as ctk
+
 from services.maquina_service import MaquinaService
 from gui import theme
 
-class JanelaLogisticaMaquina(ctk.CTkToplevel):
-    def __init__(self, parent, maquina_dados, callback_atualizar, f_padrao, f_titulo):
-        super().__init__(parent)
-        self.maquina_dados = maquina_dados  # Se for None -> Cadastro. Se vier preenchido -> Edição.
+_ESTADOS = ["Operacional", "Manutenção - Parado", "Desativado"]
+
+
+class JanelaLogisticaMaquina(theme.Dialogo):
+    def __init__(self, parent, maquina_dados, callback_atualizar, f_padrao=None, f_titulo=None):
+        self.maquina_dados = maquina_dados  # None -> registo novo; preenchido -> edição
         self.callback = callback_atualizar
-        self.f_padrao = f_padrao
+        titulo = "Nova máquina" if not maquina_dados else f"Editar máquina {maquina_dados.get('id')}"
+        super().__init__(parent, titulo, largura=460, altura=660, texto_acao="Guardar máquina",
+                         subtitulo="Campos com * são obrigatórios.")
+        self.btn_gravar = self.btn_acao
 
-        self.title("Cadastro de Ativo" if not maquina_dados else f"Modificar Ativo - {maquina_dados.get('id')}")
-        self.geometry("420x600")
-        self.resizable(False, False)
-        self.configure(fg_color=theme.BG)
+        corpo = ctk.CTkFrame(self.corpo, fg_color="transparent")
+        corpo.pack(fill="both", expand=True, padx=12)
 
-        # Garante que a janela fica focada à frente da principal
-        self.transient(parent)
-        self.grab_set()
+        def _campo(rotulo, widget, obrigatorio=False, ajuda=""):
+            theme.rotulo_campo(corpo, rotulo, obrigatorio).pack(anchor="w", pady=(10, 2))
+            widget.pack(fill="x")
+            if ajuda:
+                ctk.CTkLabel(corpo, text=ajuda, font=theme.font_body(11), text_color=theme.TEXT_MUTED,
+                             anchor="w").pack(anchor="w")
+            return widget
 
-        ctk.CTkLabel(self, text="Informações do Ativo", font=f_titulo, text_color=theme.ACCENT).pack(pady=15)
-
-        # Campo: ID da Máquina
-        ctk.CTkLabel(self, text="ID ÚNICO DO ATIVO (EX: X1C-4)", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=30, pady=(10, 0))
-        self.ent_id = theme.entry(self, font=theme.font_mono(13))
-        self.ent_id.pack(fill="x", padx=30, pady=5)
-
-        # Campo: Nome Descritivo
-        ctk.CTkLabel(self, text="NOME DESCRITIVO", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=30, pady=(10, 0))
-        self.ent_nome = theme.entry(self, font=f_padrao)
-        self.ent_nome.pack(fill="x", padx=30, pady=5)
-
-        # Campo: Modelo (agrupa unidades iguais para tarefas de manutenção partilhadas)
-        ctk.CTkLabel(self, text="MODELO (EX: BAMBU LAB X1C)", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=30, pady=(10, 0))
-        self.ent_modelo = theme.entry(self, font=f_padrao, placeholder_text="Igual em todas as unidades do mesmo modelo")
-        self.ent_modelo.pack(fill="x", padx=30, pady=5)
-
-        # Campo: Tecnologia AM
-        ctk.CTkLabel(self, text="TECNOLOGIA AM", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=30, pady=(10, 0))
-        self.cmb_tech = theme.combobox(self, values=["FDM", "SLA", "SLS"], font=f_padrao, state="readonly")
-        self.cmb_tech.pack(fill="x", padx=30, pady=5)
-
-        # Campo: Status Operacional
-        ctk.CTkLabel(self, text="STATUS OPERACIONAL", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=30, pady=(10, 0))
-        self.cmb_est = theme.combobox(self, values=["Operacional", "Manutenção - Parado", "Desativado"], font=f_padrao, state="readonly")
-        self.cmb_est.pack(fill="x", padx=30, pady=5)
-
-        # Campo: Notas de Manutenção
-        ctk.CTkLabel(self, text="NOTAS DE MANUTENÇÃO / DIAGNÓSTICO", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=30, pady=(10, 0))
-        self.ent_notas = theme.entry(self, font=f_padrao)
-        self.ent_notas.pack(fill="x", padx=30, pady=5)
+        self.ent_id = _campo("ID do ativo", theme.entry(corpo, font=theme.font_mono(13), placeholder_text="ex.: X1C-4"), True)
+        self.ent_nome = _campo("Nome", theme.entry(corpo, placeholder_text="ex.: Bambu Lab X1C #4"), True)
+        self.ent_modelo = _campo("Modelo", theme.entry(corpo, placeholder_text="ex.: Bambu Lab X1C"),
+                                 ajuda="Igual em todas as unidades do mesmo modelo (partilham tarefas de manutenção).")
+        self.cmb_tech = _campo("Tecnologia", theme.combobox(corpo, values=["FDM", "SLA", "SLS"], state="readonly"), True)
+        self.cmb_est = _campo("Estado", theme.combobox(corpo, values=_ESTADOS, state="readonly"), True)
+        self.cmb_est.set("Operacional")
+        self.ent_notas = _campo("Notas de manutenção / diagnóstico", theme.entry(corpo))
         self.ent_notas.insert(0, "OK")
+        self.ent_url_img = _campo("Imagem (URL)", theme.entry(corpo, placeholder_text="https://…/imagem.png"))
 
-        # NOVO CAMPO: URL da Miniatura (Pedido para as imagens das impressoras)
-        ctk.CTkLabel(self, text="URL DA MINIATURA DA MÁQUINA", font=theme.font_eyebrow(10), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=30, pady=(10, 0))
-        self.ent_url_img = theme.entry(self, font=f_padrao, placeholder_text="https://site.com/imagem.png")
-        self.ent_url_img.pack(fill="x", padx=30, pady=5)
-
-        # Se for um modo de Edição de uma máquina já existente, preenche os dados automáticos
         if self.maquina_dados:
             self.ent_id.insert(0, self.maquina_dados.get("id", ""))
-            self.ent_id.configure(state="disabled") # Bloqueia a edição do ID primário
-            
+            self.ent_id.configure(state="disabled")  # o ID é a chave primária
             self.ent_nome.insert(0, self.maquina_dados.get("nome", ""))
             self.ent_modelo.insert(0, self.maquina_dados.get("modelo", ""))
-            self.cmb_tech.set(self.maquina_dados.get("tech", "FDM"))
+            if self.maquina_dados.get("tech") in ("FDM", "SLA", "SLS"):
+                self.cmb_tech.set(self.maquina_dados["tech"])
             self.cmb_est.set(self.maquina_dados.get("estado", "Operacional"))
-            
             self.ent_notas.delete(0, ctk.END)
             self.ent_notas.insert(0, self.maquina_dados.get("manutencao", "OK"))
-            
             self.ent_url_img.insert(0, self.maquina_dados.get("url_img", ""))
 
-        # Botão Principal: Gravar
-        theme.button_primary(self, text="GRAVAR ATIVO", font=f_titulo, command=self.gravar).pack(fill="x", padx=30, pady=(25, 10))
+            self.btn_remover = theme.button_danger(self.rodape_esquerda, text="Eliminar", height=38, width=100,
+                                                   command=self.remover)
+            self.btn_remover.pack(side="left")
 
-        # Botão Secundário: Remover (Só aparece se o operador estiver a editar uma máquina existente)
-        if self.maquina_dados:
-            ctk.CTkButton(self, text="ELIMINAR ATIVO DO PARQUE", fg_color=theme.CRITICAL, hover_color=theme.CRITICAL[0], text_color="white", font=f_padrao, command=self.remover).pack(fill="x", padx=30, pady=5)
+    def confirmar(self):
+        self.gravar()
 
     def gravar(self):
         mid = self.ent_id.get().strip()
         nome = self.ent_nome.get().strip()
-        modelo = self.ent_modelo.get().strip()
-        notas = self.ent_notas.get().strip()
-        url_img = self.ent_url_img.get().strip()
+        tech = self.cmb_tech.get()
 
-        if not mid or not nome:
-            messagebox.showwarning("Aviso", "Preencha o ID e o Nome do ativo antes de salvar.")
+        erros = []
+        if not mid:
+            erros.append("Indique o ID do ativo.")
+        if not nome:
+            erros.append("Indique o nome.")
+        if tech not in ("FDM", "SLA", "SLS"):
+            erros.append("Escolha a tecnologia — sem ela a máquina nunca aparece em Nova ordem.")
+        if erros:
+            messagebox.showwarning("Máquina incompleta", "\n".join(f"• {e}" for e in erros))
             return
 
-        # Envia todos os dados recolhidos para o serviço tratar a persistência no JSON
+        notas = self.ent_notas.get().strip()
         MaquinaService.salvar_maquina(
             mid=mid,
             nome=nome,
-            tech=self.cmb_tech.get(),
+            tech=tech,
             estado=self.cmb_est.get(),
             manutencao=notas if notas else "OK",
-            url_img=url_img,
-            modelo=modelo,
+            url_img=self.ent_url_img.get().strip(),
+            modelo=self.ent_modelo.get().strip(),
         )
-        
-        self.callback() # Atualiza o mosaico de cards na tela principal imediatamente
+        theme.toast(self, f"Máquina {mid} guardada.")
+        self.callback()
         self.destroy()
 
     def remover(self):
-        if messagebox.askyesno("Confirmação de Engenharia", f"Tem a certeza que deseja remover permanentemente o ativo {self.maquina_dados.get('id')} do parque?"):
-            MaquinaService.remover_maquina(self.maquina_dados.get("id"))
-            self.callback() # Redesenha o mosaico sem a máquina removida
+        """Eliminar só é permitido a máquinas sem histórico: as ordens antigas
+        referem a máquina pelo nome e ficariam órfãs. Com histórico, o caminho
+        é o estado "Desativado" (deixa de ser oferecida em Nova ordem)."""
+        from services.producao_service import ProducaoService
+
+        nome = self.maquina_dados.get("nome")
+        mid = self.maquina_dados.get("id")
+        n_ordens = sum(1 for p in ProducaoService.obter_todos(incluir_anuladas=True)
+                       if p.get("maquina") == nome or p.get("id_maquina") == mid)
+        if n_ordens:
+            messagebox.showwarning(
+                "Máquina com histórico",
+                f"{nome} tem {n_ordens} ordem(ns) de produção registada(s) — eliminá-la deixaria esse "
+                "histórico sem máquina.\n\nMude o estado para \"Desativado\": deixa de aparecer em "
+                "Nova ordem e mantém o histórico.")
+            return
+        if messagebox.askyesno("Eliminar máquina",
+                               f"Eliminar a máquina {mid} do parque?\nEsta ação não pode ser desfeita."):
+            MaquinaService.remover_maquina(mid)
+            theme.toast(self, f"Máquina {mid} eliminada.", "info")
+            self.callback()
             self.destroy()

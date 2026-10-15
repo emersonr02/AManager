@@ -102,7 +102,7 @@ def test_filtro_por_data_exclui_fora_do_intervalo(gui_arquivos, ctk_root):
 
     linhas = _linhas(tab)
     assert len(linhas) == 1
-    assert linhas[0][1] == "2026-06-15"
+    assert linhas[0][1] == "15/06/2026"
 
 
 def test_kpi_taxa_sucesso_ignora_em_andamento(gui_arquivos, ctk_root):
@@ -175,15 +175,40 @@ def test_clonar_log_cria_nova_producao_em_andamento(gui_arquivos, ctk_root, monk
     assert clone["estado"] == "Em Andamento"
 
 
-def test_remover_log_apaga_apos_confirmacao(gui_arquivos, ctk_root, monkeypatch):
+def test_anular_ordem_esconde_mas_mantem_registo_e_auditoria(gui_arquivos, ctk_root, monkeypatch):
+    # Antes "Apagar registo" apagava de vez um registo de qualidade, sem rasto.
+    from services.audit_service import AuditService
+    p = _criar_producao(gui_arquivos)
+    tab = HistoricoTab(ctk_root, None, None, None)
+    tab.tab_tree.selection_set(tab.tab_tree.get_children()[0])
+
+    tab.anular_ordem()
+    dialogo = ctk_root.winfo_toplevel().winfo_children()[-1]
+    dialogo.ent_motivo.insert(0, "registo duplicado")
+    dialogo.confirmar()
+
+    assert ProducaoService.obter_todos() == []                      # deixa de contar
+    guardada = ProducaoService.obter_todos(incluir_anuladas=True)[0]  # mas continua no ficheiro
+    assert guardada["anulada"] is True
+    assert guardada["motivo_anulacao"] == "registo duplicado"
+    assert any(e["campo"] == "anulada" for e in AuditService.obter_historico("producao", p["id"]))
+    assert _linhas(tab) == []
+
+
+def test_anular_sem_motivo_e_bloqueado(gui_arquivos, ctk_root, monkeypatch):
+    avisos = []
+    monkeypatch.setattr("gui.historico_tab.messagebox.showwarning", lambda t, m: avisos.append(m))
     _criar_producao(gui_arquivos)
     tab = HistoricoTab(ctk_root, None, None, None)
-    monkeypatch.setattr("gui.historico_tab.messagebox.askyesno", lambda *a, **k: True)
-
     tab.tab_tree.selection_set(tab.tab_tree.get_children()[0])
-    tab.remover_log()
 
-    assert ProducaoService.obter_todos() == []
+    tab.anular_ordem()
+    dialogo = ctk_root.winfo_toplevel().winfo_children()[-1]
+    dialogo.confirmar()
+
+    assert avisos
+    assert len(ProducaoService.obter_todos()) == 1
+    dialogo.destroy()
 
 
 def test_exportar_csv_gera_ficheiro_a_partir_da_tabela(gui_arquivos, ctk_root, monkeypatch, tmp_path):
@@ -203,31 +228,58 @@ def test_exportar_csv_gera_ficheiro_a_partir_da_tabela(gui_arquivos, ctk_root, m
     assert "X1C-1" in conteudo
 
 
-def test_alerta_manutencao_sem_tarefas_mostra_tudo_em_dia(gui_arquivos, ctk_root):
+# ---------- Fase 2: botões ligados à seleção, detalhe e fecho do ciclo ----------
+
+def test_botoes_de_acao_so_ativos_com_selecao(gui_arquivos, ctk_root):
+    _criar_producao(gui_arquivos)
     tab = HistoricoTab(ctk_root, None, None, None)
 
-    assert tab.lbl_kpi_manutencao.cget("text") == "Tudo em dia"
+    assert tab.btn_fechar.cget("state") == "disabled"
+    tab.tab_tree.selection_set(tab.tab_tree.get_children()[0])
+    tab._atualizar_botoes()
+    assert tab.btn_fechar.cget("state") == "normal"
 
 
-def test_alerta_manutencao_mostra_contagem_de_atrasadas(gui_arquivos, ctk_root):
-    MaquinaService.salvar_maquina(mid="M1", nome="Printer 1", tech="FDM", estado="Operacional", manutencao="OK", modelo="Bambu Lab X1C")
-    tarefa = ManutencaoService.criar_tarefa(modelo="Bambu Lab X1C", nome="Limpeza", frequencia_dias=10)
-    JSONManager.salvar([{
-        "id": 1, "tarefa_id": tarefa["id"], "maquina_id": "M1",
-        "data_realizacao": (datetime.now() - timedelta(days=20)).strftime("%Y-%m-%d %H:%M:%S"),
-        "operador": "a", "notas": "",
-    }], gui_arquivos["manutencoes"])
-
+def test_detalhe_mostra_operador_e_pedidos(gui_arquivos, ctk_root):
+    pedido = _criar_pedido(gui_arquivos)
+    _criar_producao(gui_arquivos, pedidos_vinculados=[pedido["id"]], operador="jsilva")
     tab = HistoricoTab(ctk_root, None, None, None)
 
-    assert tab.lbl_kpi_manutencao.cget("text") == "1 atrasadas"
+    tab.tab_tree.selection_set(tab.tab_tree.get_children()[0])
+    tab._mostrar_detalhe()
+
+    texto = tab.lbl_detalhe.cget("text")
+    assert "jsilva" in texto
+    assert PedidoService.formatar_codigo(pedido["id"]) in texto
 
 
-def test_alerta_manutencao_clique_navega_para_manutencao(gui_arquivos, ctk_root):
-    chamadas = []
-    master_app_falso = type("MasterAppFalso", (), {"selecionar_tela": lambda self, nome: chamadas.append(nome)})()
-    tab = HistoricoTab(ctk_root, None, None, master_app_falso)
+def test_concluir_ordem_regista_pecas_e_propoe_estado_do_pedido(gui_arquivos, ctk_root, monkeypatch):
+    perguntas = []
+    monkeypatch.setattr("gui.historico_tab.messagebox.askyesno", lambda t, m: perguntas.append(m) or True)
+    pedido = _criar_pedido(gui_arquivos, pecas=[{"pn": "P1", "material": "PLA", "qtd_solicitada": 2, "qtd_produzida": 0}])
+    producao = _criar_producao(gui_arquivos, pedidos_vinculados=[pedido["id"]])
+    PedidoService.vincular_producao([pedido["id"]], producao["id"])
+    tab = HistoricoTab(ctk_root, None, None, None)
 
-    tab._ir_para_manutencao()
+    producao["estado"] = "Concluída"
+    producao["qa_por_peca"] = {f"{pedido['id']}:P1:0": {"inspecao_visual": True, "controlo_dimensional": True, "conformidade": True}}
+    tab.salvar_estado_final_ordem(producao)
 
-    assert chamadas == ["manutencao"]
+    atualizado = PedidoService.obter_por_id(pedido["id"])
+    assert atualizado["pecas"][0]["qtd_produzida"] == 2
+    assert perguntas and "Concluído" in perguntas[0]
+    assert atualizado["estado"] == "Concluído"
+
+
+def test_recusar_proposta_mantem_estado_do_pedido(gui_arquivos, ctk_root, monkeypatch):
+    monkeypatch.setattr("gui.historico_tab.messagebox.askyesno", lambda t, m: False)
+    pedido = _criar_pedido(gui_arquivos, pecas=[{"pn": "P1", "material": "PLA", "qtd_solicitada": 2, "qtd_produzida": 0}])
+    producao = _criar_producao(gui_arquivos, pedidos_vinculados=[pedido["id"]])
+    PedidoService.vincular_producao([pedido["id"]], producao["id"])
+    tab = HistoricoTab(ctk_root, None, None, None)
+
+    producao["estado"] = "Concluída"
+    producao["qa_por_peca"] = {f"{pedido['id']}:P1:0": {"conformidade": True}}
+    tab.salvar_estado_final_ordem(producao)
+
+    assert PedidoService.obter_por_id(pedido["id"])["estado"] == "Em Andamento"
