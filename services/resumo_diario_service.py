@@ -37,7 +37,7 @@ class ResumoDiarioService:
         concluidas = [p for p in producoes_hoje if p.get("estado") in ("Concluída", "Entregue")]
         canceladas = [p for p in producoes_hoje if p.get("estado") == "Cancelada"]
         em_curso_hoje = [p for p in producoes_hoje if p.get("estado") in ("Em Andamento", "A Imprimir")]
-        com_nc = [p for p in producoes_hoje if p.get("nc_codigo")]
+        com_nc = [p for p in producoes_hoje if ProducaoService.ncs_da_producao(p)]
 
         total_horas = sum(
             ProducaoService.converter_para_horas(ProducaoService.normalizar_tempo(p))

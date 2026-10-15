@@ -35,8 +35,11 @@ class ProducaoTab:
         self.parent = parent_frame
         self.f_padrao = f_padrao
         self.master_app = master_app
+        # Peças e quantidades desta ordem: [{pedido_id, indice, pn, material, qtd}].
+        # pedidos_vinculados é derivado delas (pedidos de onde vêm as peças).
+        self.pecas_producao = []
         self.pedidos_vinculados = []
-        self.dict_checks_pedidos = []
+        self.dict_checks_pecas = []
         self._templates_cache = {}
         self.parent.configure(fg_color=theme.BG)
 
@@ -93,7 +96,7 @@ class ProducaoTab:
         self.cmb_template.grid(row=linha, column=0, sticky="w", padx=14)
         linha += 1
 
-        _rotulo("Pedidos a produzir", True)
+        _rotulo("Peças a produzir", True)
         frm_ped = ctk.CTkFrame(frm, fg_color="transparent")
         frm_ped.grid(row=linha, column=0, sticky="ew", padx=14)
         linha += 1
@@ -101,7 +104,7 @@ class ProducaoTab:
         self.ent_pedidos_sel.insert(0, _SEM_PEDIDOS)
         self.ent_pedidos_sel.configure(state="readonly")
         self.ent_pedidos_sel.pack(side="left", fill="x", expand=True, padx=(0, 10))
-        theme.button_ghost(frm_ped, text="Selecionar pedidos", width=160, command=self.abrir_pop_up_selecao_pedidos).pack(side="right")
+        theme.button_ghost(frm_ped, text="Selecionar peças", width=160, command=self.abrir_selecao_pecas).pack(side="right")
 
         _rotulo("Máquina", True)
         self.cmb_maq = theme.combobox(frm, values=["A carregar..."], width=320, state="readonly", command=self.ao_selecionar_maquina)
@@ -132,7 +135,7 @@ class ProducaoTab:
         self._col_tempo, _, self.ent_tempo = _num("Tempo de máquina (HH:MM)", "ex.: 02:30")
         # A máscara reformata "0230" → "02:30"; o estado do rodapé é recalculado depois dela.
         self.ent_tempo.bind("<KeyRelease>", lambda e: (self.mascara_tempo(e, self.ent_tempo), self._atualizar_estado()), add="+")
-        self._col_quant, self.lbl_quant, self.ent_quant = _num("Quantidade (g)", "ex.: 150")
+        self._col_quant, self.lbl_quant, self.ent_quant = _num("Material estimado (g)", "ex.: 150")
         self._col_altura, self.lbl_altura, self.ent_altura = _num("Altura da cuba (mm)", "ex.: 320")
         self._col_perc, self.lbl_perc, self.ent_perc = _num("Pó novo (fração)", "ex.: 0.3")
         self._col_tempo.grid(row=0, column=0, sticky="w", padx=(0, 16), pady=(0, 6))
@@ -174,7 +177,7 @@ class ProducaoTab:
         # ── Coluna direita: resumo dos pedidos escolhidos ────────────────
         card_resumo = theme.card(corpo)
         card_resumo.grid(row=0, column=1, sticky="nsew")
-        ctk.CTkLabel(card_resumo, text="PEDIDOS NESTA ORDEM", font=theme.font_eyebrow(11), text_color=theme.TEXT_MUTED,
+        ctk.CTkLabel(card_resumo, text="PEÇAS NESTA ORDEM", font=theme.font_eyebrow(11), text_color=theme.TEXT_MUTED,
                      anchor="w").pack(fill="x", padx=16, pady=(12, 4))
         self.frm_resumo = ctk.CTkScrollableFrame(card_resumo, fg_color="transparent")
         self.frm_resumo.pack(fill="both", expand=True, padx=6, pady=(0, 10))
@@ -186,8 +189,8 @@ class ProducaoTab:
         tech_atual = escolha or self.cmb_tech.get() or "FDM"
         self.cmb_tech.set(tech_atual)
 
-        # Pedidos de outra tecnologia deixam de fazer sentido
-        self._definir_pedidos([])
+        # Peças de pedidos de outra tecnologia deixam de fazer sentido
+        self._definir_pecas([])
         self._atualizar_lista_templates(tech_atual)
 
         for col in (self._col_quant, self._col_altura, self._col_perc):
@@ -196,7 +199,7 @@ class ProducaoTab:
             bloco.grid_forget()
 
         if tech_atual in ("FDM", "SLA"):
-            self.lbl_quant.configure(text=f"QUANTIDADE ({_UNIDADE[tech_atual].upper()}) *")
+            self.lbl_quant.configure(text=f"MATERIAL ESTIMADO ({_UNIDADE[tech_atual].upper()}) *")
             self._col_quant.grid(row=0, column=1, sticky="w", pady=(0, 6))
         else:
             # Em grelha de 2 colunas: 3 campos lado a lado não cabiam num portátil
@@ -298,14 +301,22 @@ class ProducaoTab:
         JanelaGuardarTemplate(self.parent.winfo_toplevel(), self)
 
     # ------------------------------------------------------------------ #
-    #  PEDIDOS                                                             #
+    #  PEÇAS                                                               #
     # ------------------------------------------------------------------ #
-    def _definir_pedidos(self, ids):
-        self.pedidos_vinculados = list(ids)
+    def _definir_pecas(self, pecas):
+        """Define as peças (e quantidades) desta ordem e os pedidos de onde vêm."""
+        self.pecas_producao = [dict(p) for p in pecas if int(p.get("qtd", 0) or 0) > 0]
+        ids = []
+        for p in self.pecas_producao:
+            if p["pedido_id"] not in ids:
+                ids.append(p["pedido_id"])
+        self.pedidos_vinculados = ids
         self.ent_pedidos_sel.configure(state="normal")
         self.ent_pedidos_sel.delete(0, "end")
-        if ids:
-            self.ent_pedidos_sel.insert(0, "Pedidos: " + ", ".join(PedidoService.formatar_codigo(i) for i in ids))
+        if self.pecas_producao:
+            unidades = sum(int(p["qtd"]) for p in self.pecas_producao)
+            self.ent_pedidos_sel.insert(0, f"{len(self.pecas_producao)} peça(s), {unidades} un. — "
+                                           + ", ".join(PedidoService.formatar_codigo(i) for i in ids))
         else:
             self.ent_pedidos_sel.insert(0, _SEM_PEDIDOS)
         self.ent_pedidos_sel.configure(state="readonly")
@@ -315,42 +326,47 @@ class ProducaoTab:
     def _atualizar_resumo(self):
         for w in self.frm_resumo.winfo_children():
             w.destroy()
-        pedidos = [p for p in PedidoService.obter_todos() if p.get("id") in self.pedidos_vinculados]
-        if not pedidos:
-            ctk.CTkLabel(self.frm_resumo, text="Ainda sem pedidos. Use \"Selecionar pedidos\" — só aparecem pedidos "
-                                               "abertos da tecnologia escolhida.",
+        if not self.pecas_producao:
+            ctk.CTkLabel(self.frm_resumo, text="Ainda sem peças. Use \"Selecionar peças\" — escolha as peças e "
+                                               "quantidades desta ordem, de um ou mais pedidos abertos.",
                          font=theme.font_body(12), text_color=theme.TEXT_MUTED, wraplength=240, justify="left",
                          anchor="w").pack(fill="x", padx=10, pady=6)
             return
-        for p in pedidos:
+        pedidos = {p.get("id"): p for p in PedidoService.obter_todos()}
+        for pid in self.pedidos_vinculados:
+            p = pedidos.get(pid, {})
             bloco = ctk.CTkFrame(self.frm_resumo, fg_color=theme.SURFACE_ALT, corner_radius=theme.RADIUS_S)
             bloco.pack(fill="x", padx=6, pady=4)
-            dias = PedidoService.dias_ate_prazo(p)
-            prazo = p.get("data_entrega", "—")
+            dias = PedidoService.dias_ate_prazo(p) if p else None
             cor_prazo = theme.CRITICAL if dias is not None and dias < 0 else (theme.WARNING if dias is not None and dias <= 2 else theme.TEXT_MUTED)
             topo = ctk.CTkFrame(bloco, fg_color="transparent")
             topo.pack(fill="x", padx=10, pady=(8, 0))
-            ctk.CTkLabel(topo, text=PedidoService.formatar_codigo(p.get("id")), font=theme.font_mono(12, "bold"),
+            ctk.CTkLabel(topo, text=PedidoService.formatar_codigo(pid), font=theme.font_mono(12, "bold"),
                          text_color=theme.TEXT).pack(side="left")
-            ctk.CTkLabel(topo, text=f"prazo {prazo}", font=theme.font_body(11), text_color=cor_prazo).pack(side="right")
+            ctk.CTkLabel(topo, text=f"prazo {p.get('data_entrega', '—')}", font=theme.font_body(11), text_color=cor_prazo).pack(side="right")
             projeto = f"{p.get('nr_projeto', '')} - {p.get('nome_projeto', '')}".strip(" -")
             ctk.CTkLabel(bloco, text=projeto, font=theme.font_body(12), text_color=theme.TEXT, anchor="w",
                          wraplength=240, justify="left").pack(fill="x", padx=10)
-            for peca in p.get("pecas", []):
-                ctk.CTkLabel(bloco, text=f"•  {peca.get('pn', '')}  ×{peca.get('qtd_solicitada', '')}  ({peca.get('material', '')})",
+            pecas_pedido = p.get("pecas", [])
+            for peca in (x for x in self.pecas_producao if x["pedido_id"] == pid):
+                pedida = pecas_pedido[peca["indice"]].get("qtd_solicitada", "?") if peca["indice"] < len(pecas_pedido) else "?"
+                ctk.CTkLabel(bloco, text=f"•  {peca['pn']}  ×{peca['qtd']}  de {pedida}  ({peca['material']})",
                              font=theme.font_body(11), text_color=theme.TEXT_MUTED, anchor="w", wraplength=240,
                              justify="left").pack(fill="x", padx=10)
             ctk.CTkLabel(bloco, text="", height=4).pack()
 
-    def abrir_pop_up_selecao_pedidos(self):
+    def abrir_selecao_pecas(self):
         tech_atual = self.cmb_tech.get()
         compativeis = [p for p in PedidoService.obter_todos()
                        if p.get("estado", "") in PedidoService.ESTADOS_ABERTOS and p.get("ativo") is not False
-                       and p.get("tecnologia") == tech_atual]
+                       and p.get("tecnologia") == tech_atual and p.get("pecas")]
         if not compativeis:
             messagebox.showinfo("Sem pedidos abertos", f"Não existem pedidos em aberto para {tech_atual}.")
             return
-        self.dialogo_selecao = JanelaSelecionarPedidos(self.parent.winfo_toplevel(), self, compativeis)
+        self.dialogo_selecao = JanelaSelecionarPecas(self.parent.winfo_toplevel(), self, compativeis)
+
+    # nome antigo (ferramenta de capturas, atalhos)
+    abrir_pop_up_selecao_pedidos = abrir_selecao_pecas
 
     # ------------------------------------------------------------------ #
     #  VALIDAÇÃO / GRAVAÇÃO                                                #
@@ -383,14 +399,14 @@ class ProducaoTab:
         """Lista do que falta para poder iniciar (mostrada no rodapé)."""
         tech = self.cmb_tech.get()
         falta = []
-        if not self.pedidos_vinculados:
-            falta.append("pedidos")
+        if not self.pecas_producao:
+            falta.append("peças")
         if not self._maquina_valida():
             falta.append("máquina")
         if not ProducaoService.validar_formato_tempo(self.ent_tempo.get()):
             falta.append("tempo")
         if tech in ("FDM", "SLA") and not ProducaoService.validar_numero_positivo(self.ent_quant.get()):
-            falta.append("quantidade")
+            falta.append("material estimado")
         if tech == "SLS":
             if not ProducaoService.validar_numero_positivo(self.ent_altura.get()):
                 falta.append("altura da cuba")
@@ -417,8 +433,8 @@ class ProducaoTab:
 
     def gravar_producao(self):
         # As mesmas regras do rodapé, com a mensagem específica de cada bloqueio.
-        if not self.pedidos_vinculados:
-            messagebox.showwarning("Sem pedidos", "Vincule pelo menos um pedido a esta ordem.")
+        if not self.pecas_producao:
+            messagebox.showwarning("Sem peças", "Escolha as peças (e quantidades) a produzir nesta ordem.")
             return
         tempo = self.ent_tempo.get().strip()
         if not tempo or not ProducaoService.validar_formato_tempo(tempo):
@@ -441,11 +457,12 @@ class ProducaoTab:
                 return
 
         # Travas de segurança por tecnologia
-        campos_extra = {}
+        campos_extra = {"pecas_producao": [
+            {k: p[k] for k in ("pedido_id", "indice", "pn", "material", "qtd")} for p in self.pecas_producao]}
         if tech in ("FDM", "SLA"):
             quant = self.ent_quant.get().strip()
             if not quant or not ProducaoService.validar_numero_positivo(quant):
-                messagebox.showwarning("Quantidade inválida", f"A quantidade ({_UNIDADE[tech]}) tem de ser um número maior que zero.")
+                messagebox.showwarning("Material inválido", f"O material estimado ({_UNIDADE[tech]}) tem de ser um número maior que zero.")
                 return
             if not all(var.get() for var in self.checklist_vars[tech].values()):
                 messagebox.showwarning("Checklist incompleto", f"Valide todos os itens do checklist crítico {tech} antes de iniciar.")
@@ -487,51 +504,92 @@ class ProducaoTab:
         self.ao_mudar_tecnologia(tech)
 
 
-class JanelaSelecionarPedidos(theme.Dialogo):
-    """Escolha dos pedidos a produzir numa ordem. Só se agrupam pedidos com o
-    mesmo material — os incompatíveis ficam desativados com o motivo à vista."""
+class JanelaSelecionarPecas(theme.Dialogo):
+    """Escolha das PEÇAS e QUANTIDADES desta ordem (não pedidos inteiros): uma
+    ordem pode levar só algumas peças de um pedido, e peças de vários pedidos.
+
+    Para cada peça mostra quanto falta: pedido − já produzido − já planeado em
+    ordens abertas. Só se agrupam peças do mesmo material — as incompatíveis
+    ficam desativadas com o motivo à vista."""
 
     def __init__(self, parent, tab, pedidos):
         self.tab = tab
-        super().__init__(parent, f"Selecionar pedidos ({tab.cmb_tech.get()})", largura=640, altura=520,
+        super().__init__(parent, f"Selecionar peças ({tab.cmb_tech.get()})", largura=760, altura=600,
                          texto_acao="Confirmar seleção", estilo_acao="action",
-                         subtitulo="Só é possível agrupar pedidos do mesmo material.")
-        tab.dict_checks_pedidos = []
-        ja_selecionados = set(tab.pedidos_vinculados)
+                         subtitulo="Marque as peças a produzir nesta ordem e ajuste a quantidade de cada uma. "
+                                   "Só é possível agrupar peças do mesmo material.")
+        em_producao = ProducaoService.qtd_em_producao_por_peca()
+        atuais = {(p["pedido_id"], p["indice"]): p["qtd"] for p in tab.pecas_producao}
+        tab.dict_checks_pecas = []
+
         for p in pedidos:
-            mats = sorted({peca.get("material") for peca in p.get("pecas", []) if peca.get("material")})
-            n_pecas = sum(int(peca.get("qtd_solicitada", 0) or 0) for peca in p.get("pecas", []))
-            linha = ctk.CTkFrame(self.corpo, fg_color="transparent")
-            linha.pack(fill="x", padx=8, pady=4)
-            var = tk.BooleanVar(value=p.get("id") in ja_selecionados)
-            texto = (f"{PedidoService.formatar_codigo(p.get('id'))}  ·  {p.get('nr_projeto', '')} {p.get('nome_projeto', '')}  ·  "
-                     f"{', '.join(mats) or 'sem material'}  ·  {n_pecas} un.  ·  prazo {p.get('data_entrega', '—')}")
-            chk = theme.checkbox(linha, text=texto, variable=var, command=self.reavaliar_bloqueio_materiais)
-            chk.pack(side="left", anchor="w")
-            lbl_motivo = ctk.CTkLabel(linha, text="", font=theme.font_body(11), text_color=theme.TEXT_MUTED)
-            lbl_motivo.pack(side="left", padx=8)
-            tab.dict_checks_pedidos.append({"id": p.get("id"), "var": var, "widget": chk, "materiais": mats,
-                                            "objeto": p, "motivo": lbl_motivo})
+            cab = ctk.CTkFrame(self.corpo, fg_color="transparent")
+            cab.pack(fill="x", padx=8, pady=(10, 2))
+            ctk.CTkLabel(cab, text=PedidoService.formatar_codigo(p.get("id")), font=theme.font_mono(12, "bold"),
+                         text_color=theme.TEXT).pack(side="left")
+            ctk.CTkLabel(cab, text=f"  {p.get('nr_projeto', '')} {p.get('nome_projeto', '')}  ·  prazo {p.get('data_entrega', '—')}",
+                         font=theme.font_body(12), text_color=theme.TEXT_MUTED).pack(side="left")
+
+            for idx, peca in enumerate(p.get("pecas", [])):
+                try:
+                    pedida = int(peca.get("qtd_solicitada", 0) or 0)
+                    feita = int(peca.get("qtd_produzida", 0) or 0)
+                except (TypeError, ValueError):
+                    pedida, feita = 0, 0
+                planeada = em_producao.get((p.get("id"), idx), 0)
+                falta = max(pedida - feita - planeada, 0)
+                chave = (p.get("id"), idx)
+
+                linha = ctk.CTkFrame(self.corpo, fg_color="transparent")
+                linha.pack(fill="x", padx=(24, 8), pady=2)
+                var = tk.BooleanVar(value=chave in atuais)
+                chk = theme.checkbox(linha, text=f"{peca.get('pn', '')}  ·  {peca.get('material', '') or 'sem material'}",
+                                     variable=var, width=320)
+                chk.pack(side="left")
+                ent_qtd = theme.entry(linha, width=70, font=theme.font_mono(12), justify="right")
+                ent_qtd.insert(0, str(atuais.get(chave, falta if falta else pedida)))
+                ent_qtd.pack(side="left", padx=(0, 8))
+                detalhe = f"faltam {falta} de {pedida}"
+                if planeada:
+                    detalhe += f"  ({planeada} já noutras ordens)"
+                lbl_info = ctk.CTkLabel(linha, text=detalhe, font=theme.font_body(11),
+                                        text_color=theme.TEXT_MUTED if falta else theme.WARNING)
+                lbl_info.pack(side="left")
+                item = {"pedido_id": p.get("id"), "indice": idx, "pn": peca.get("pn", ""),
+                        "material": peca.get("material", ""), "var": var, "widget": chk, "ent_qtd": ent_qtd,
+                        "falta": falta, "info": lbl_info, "detalhe": detalhe}
+                chk.configure(command=self.reavaliar_bloqueio_materiais)
+                tab.dict_checks_pecas.append(item)
         self.reavaliar_bloqueio_materiais()
 
     def reavaliar_bloqueio_materiais(self):
-        itens = self.tab.dict_checks_pedidos
-        ativos = set()
+        itens = self.tab.dict_checks_pecas
+        materiais = {item["material"] for item in itens if item["var"].get()}
         for item in itens:
-            if item["var"].get():
-                ativos.update(item["materiais"])
-        for item in itens:
-            compativel = not ativos or any(m in ativos for m in item["materiais"])
-            if compativel:
+            if not materiais or item["material"] in materiais:
                 item["widget"].configure(state="normal", text_color=theme.TEXT)
-                item["motivo"].configure(text="")
+                item["ent_qtd"].configure(state="normal")
+                item["info"].configure(text=item["detalhe"])
             else:
                 item["var"].set(False)
                 item["widget"].configure(state="disabled", text_color=theme.TEXT_MUTED)
-                item["motivo"].configure(text="(material diferente)")
+                item["ent_qtd"].configure(state="disabled")
+                item["info"].configure(text="(material diferente)")
 
     def confirmar(self):
-        self.tab._definir_pedidos([item["id"] for item in self.tab.dict_checks_pedidos if item["var"].get()])
+        escolhidas, erros = [], []
+        for item in self.tab.dict_checks_pecas:
+            if not item["var"].get():
+                continue
+            texto = item["ent_qtd"].get().strip()
+            if not texto.isdigit() or int(texto) <= 0:
+                erros.append(f"{PedidoService.formatar_codigo(item['pedido_id'])} · {item['pn']}: quantidade tem de ser um inteiro maior que zero.")
+                continue
+            escolhidas.append({k: item[k] for k in ("pedido_id", "indice", "pn", "material")} | {"qtd": int(texto)})
+        if erros:
+            messagebox.showwarning("Quantidades inválidas", "\n".join(erros))
+            return
+        self.tab._definir_pecas(escolhidas)
         self.destroy()
 
 

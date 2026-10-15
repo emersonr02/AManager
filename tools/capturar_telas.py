@@ -214,9 +214,16 @@ def _percorrer_telas(app, cap: "_Capturador", alvos: dict):
         from services.pedido_service import PedidoService
         app.abrir_nova_ordem(tech)
         ui = app._uis["producao"]
-        abertos = [p["id"] for p in PedidoService.obter_todos()
+        abertos = [p for p in PedidoService.obter_todos()
                    if p.get("tecnologia") == tech and p.get("estado") in PedidoService.ESTADOS_ABERTOS]
-        ui._definir_pedidos(abertos[:1])   # mostra o resumo dos pedidos à direita
+        # Só a primeira peça do primeiro pedido aberto, com parte da quantidade —
+        # mostra no resumo à direita que a ordem leva peças, não pedidos inteiros.
+        if abertos and abertos[0].get("pecas"):
+            peca = abertos[0]["pecas"][0]
+            ui._definir_pecas([{"pedido_id": abertos[0]["id"], "indice": 0, "pn": peca["pn"],
+                                "material": peca["material"], "qtd": max(1, int(peca["qtd_solicitada"]) // 2)}])
+        else:
+            ui._definir_pecas([])
     cap.tela("05_nova_ordem_fdm", lambda: nova_ordem("FDM"))
     cap.tela("05b_nova_ordem_sls", lambda: nova_ordem("SLS"))
 
@@ -239,7 +246,7 @@ def _percorrer_telas(app, cap: "_Capturador", alvos: dict):
     def selecionar_pedidos():
         app.abrir_nova_ordem("FDM")
         app._uis["producao"].abrir_pop_up_selecao_pedidos()
-    cap.dialogo("10_selecionar_pedidos", selecionar_pedidos)
+    cap.dialogo("10_selecionar_pecas", selecionar_pedidos)
 
     app.selecionar_tela("pedidos")
     pedidos = app._uis["pedidos"]
@@ -490,6 +497,12 @@ def _escrever_dados_ficticios(pasta: Path) -> dict:
             "estado": estado, "operador": rnd.choice(["jsilva", "mferreira"]),
             "pedidos_vinculados": [rnd.choice(pedidos_com_producao[tech])],
         }
+        # A ordem leva peças e quantidades (não o pedido inteiro): a primeira
+        # peça do pedido, metade da quantidade pedida.
+        pedido = next(x for x in pedidos if x["id"] == p["pedidos_vinculados"][0])
+        peca = pedido["pecas"][0]
+        p["pecas_producao"] = [{"pedido_id": pedido["id"], "indice": 0, "pn": peca["pn"],
+                                "material": peca["material"], "qtd": max(1, peca["qtd_solicitada"] // 2)}]
         if tech == "SLS":
             p.update({"altura_cuba": "320", "percentagem_po_novo": "0.3", "lote_po": "L-2026-07"})
         else:
@@ -521,15 +534,23 @@ def _escrever_dados_ficticios(pasta: Path) -> dict:
         producoes.append(producao("FDM", agora - timedelta(days=dias_atras, hours=2), "Cancelada",
                                   maquina="Bambu Lab X1C #2", nc="COD002"))
 
-    # Alvo do diálogo Fechar Ordem: FDM com NC, ação aplicada e QA parcial.
+    # Alvo do diálogo Fechar Ordem: FDM com as duas peças de um pedido; a
+    # segunda teve 1 unidade rejeitada por warping (NC só dessa peça).
     fecho = producao("FDM", agora - timedelta(days=1, hours=6), "Concluída",
-                     maquina="Bambu Lab X1C #1", nc="COD001", acoes=["ACT01"], horas=5)
+                     maquina="Bambu Lab X1C #1", horas=5)
     pedido_fecho = next(p for p in pedidos if p["id"] in fecho["pedidos_vinculados"])
-    fecho["qa_por_peca"] = {
-        f"{pedido_fecho['id']}:{peca['pn']}:{idx}": {
-            "inspecao_visual": True, "controlo_dimensional": idx == 0, "conformidade": idx == 0}
-        for idx, peca in enumerate(pedido_fecho["pecas"])
-    }
+    fecho["pecas_producao"] = [
+        {"pedido_id": pedido_fecho["id"], "indice": idx, "pn": peca["pn"], "material": peca["material"],
+         "qtd": peca["qtd_solicitada"]}
+        for idx, peca in enumerate(pedido_fecho["pecas"])]
+    fecho["qa_por_peca"] = {}
+    for idx, peca in enumerate(pedido_fecho["pecas"]):
+        rejeitadas = 1 if idx == 1 else 0
+        fecho["qa_por_peca"][f"{pedido_fecho['id']}:{peca['pn']}:{idx}"] = {
+            "qtd_planeada": peca["qtd_solicitada"], "qtd_aprovada": peca["qtd_solicitada"] - rejeitadas,
+            "qtd_rejeitada": rejeitadas, "nc_codigo": "COD003" if rejeitadas else "",
+            "inspecao_visual": True, "controlo_dimensional": True, "conformidade": not rejeitadas}
+    fecho.update({"acoes_aplicadas": ["ACT04"], "notas_acao_corretiva": "Câmara a 45 °C na reimpressão."})
     producoes.append(fecho)
 
     # Hoje: uma concluída de manhã e três em curso.

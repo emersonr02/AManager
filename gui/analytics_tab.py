@@ -222,8 +222,8 @@ class AnalyticsTab:
         fig, ax = self._criar_fig("nc_pareto")
         contagem = defaultdict(int)
         for log in logs:
-            nc = log.get("nc_codigo", "")
-            if nc:
+            # NC da ordem e NC de cada peça (às vezes só uma peça falha)
+            for nc in ProducaoService.ncs_da_producao(log):
                 contagem[nc] += 1
 
         if not contagem:

@@ -112,7 +112,7 @@ class PainelTab:
         projetos = {p.get("id"): p.get("nr_projeto", "") for p in PedidoService.obter_todos()}
         self._em_curso_por_item = {}
         for p in dados["em_curso_geral"]:
-            vinc = [projetos.get(v, "") for v in p.get("pedidos_vinculados", [])]
+            vinc = [projetos.get(v, "") for v in ProducaoService.ids_pedidos_vinculados(p)]
             projeto = " | ".join(sorted({v for v in vinc if v})) or "—"
             item = self.tree_em_curso.insert("", "end", tags=("tag_run",), values=(
                 ProducaoService.formatar_codigo(p.get("id")),
@@ -187,9 +187,8 @@ class PainelTab:
         for p in dados["com_nc"]:
             if p.get("acoes_aplicadas"):
                 continue
-            cod = p.get("nc_codigo", "")
-            desc = NCService.obter_descricao(cod)
-            itens.append(("bad", "NC", f"{ProducaoService.formatar_codigo(p.get('id'))} · {cod} {desc} — sem ação corretiva",
+            ncs = ", ".join(f"{c} {NCService.obter_descricao(c)}" for c in ProducaoService.ncs_da_producao(p))
+            itens.append(("bad", "NC", f"{ProducaoService.formatar_codigo(p.get('id'))} · {ncs} — sem ação corretiva",
                           "ordens"))
 
         # Máquinas paradas (desativadas não contam: é um estado intencional)

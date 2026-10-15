@@ -50,20 +50,34 @@ def _estado_uniformizado(log):
 
 def concluir_fecho_ordem(widget, log):
     """Grava o fecho de uma ordem e fecha o ciclo com os pedidos vinculados:
-    as peças aprovadas no controlo de qualidade (conformidade) passam a contar
-    como produzidas no pedido, e — se o progresso o justificar — propõe mudar o
-    estado do pedido (ex: todas as peças feitas → Concluído).
+    as unidades APROVADAS de cada peça somam-se ao produzido no pedido (as
+    rejeitadas não) e, se o progresso o justificar, propõe mudar o estado do
+    pedido (ex: todas as peças feitas → Concluído).
+
+    Idempotente: a ordem guarda o que já creditou (`pecas_creditadas`) e só
+    aplica a diferença face à versão gravada — reabrir uma ordem para corrigir
+    não conta as peças duas vezes, e corrigir para menos (ou deixar de estar
+    Concluída) desconta. Ordens fechadas por versões anteriores contam como já
+    creditadas (ver ProducaoService.unidades_ja_creditadas).
 
     O estado do pedido nunca muda sem confirmação: um pedido pode ter várias
     ordens e só o utilizador sabe se já está tudo pronto a entregar."""
+    novo = ProducaoService.unidades_aprovadas(log)
+    gravada = ProducaoService.obter_por_id(log.get("id"))
+    if gravada is not None:
+        anterior = ProducaoService.unidades_ja_creditadas(gravada)
+    else:
+        anterior = log.get("pecas_creditadas") or {}
+    delta = {k: novo.get(k, 0) - int(anterior.get(k, 0) or 0) for k in set(novo) | set(anterior)}
+    delta = {k: v for k, v in delta.items() if v}
+    log["pecas_creditadas"] = novo
     ProducaoService.atualizar_producao(log)
     codigo = ProducaoService.formatar_codigo(log.get("id"))
     theme.toast(widget, f"Ordem {codigo} guardada como {log.get('estado')}.")
-    if log.get("estado") != "Concluída":
+    if not delta:
         return []
 
-    conformes = [chave for chave, qa in (log.get("qa_por_peca") or {}).items() if qa.get("conformidade")]
-    alterados = PedidoService.registar_pecas_produzidas(conformes)
+    alterados = PedidoService.registar_pecas_produzidas(delta)
     sugestoes = []
     for p in alterados:
         novo = PedidoService.estado_sugerido(p)
@@ -304,7 +318,7 @@ class HistoricoTab:
             return False
         if filtros["mat"] and filtros["mat"] not in material.lower():
             return False
-        if filtros["cod"] and filtros["cod"] not in (str(log.get("erro", "")) + " " + str(log.get("nc_codigo", ""))).lower():
+        if filtros["cod"] and filtros["cod"] not in (str(log.get("erro", "")) + " " + " ".join(ProducaoService.ncs_da_producao(log))).lower():
             return False
         if filtros["maq"] not in ("Todas", "") and ProducaoService.normalizar_maquina(log, id_para_nome) != filtros["maq"]:
             return False
@@ -408,16 +422,31 @@ class HistoricoTab:
             self.lbl_detalhe.configure(text="Selecione uma ordem para ver o detalhe e as ações.", text_color=theme.TEXT_MUTED)
             return
         partes = [ProducaoService.formatar_codigo(log.get("id"))]
-        vinc = log.get("pedidos_vinculados", [])
+        vinc = ProducaoService.ids_pedidos_vinculados(log)
         if vinc:
             partes.append("pedidos " + ", ".join(PedidoService.formatar_codigo(v) for v in vinc))
+        pecas = ProducaoService.pecas_da_producao(log)
+        qa = log.get("qa_por_peca") or {}
+        if pecas:
+            textos = []
+            for p in pecas:
+                r = qa.get(p["chave"]) or {}
+                texto = f"{p['pn']} ×{p['qtd']}"
+                if "qtd_aprovada" in r:
+                    texto += f" ({r.get('qtd_aprovada', 0)} ok"
+                    if r.get("qtd_rejeitada"):
+                        texto += f", {r['qtd_rejeitada']} rejeitadas {r.get('nc_codigo', '')}".rstrip()
+                    texto += ")"
+                textos.append(texto)
+            partes.append("peças " + ", ".join(textos))
         partes.append(f"lançada por {log.get('operador') or log.get('responsavel') or '—'}")
         if log.get("verificado_por"):
             partes.append(f"verificada por {log['verificado_por']} em {str(log.get('data_fecho', ''))[:16]}")
-        if log.get("nc_codigo"):
-            nc = log["nc_codigo"]
+        ncs = ProducaoService.ncs_da_producao(log)
+        if ncs:
             acoes = NCService.formatar_acoes_aplicadas(log.get("acoes_aplicadas"))
-            partes.append(f"NC {nc} {NCService.obter_descricao(nc)}" + (f" — ações: {acoes}" if acoes else " — sem ação corretiva"))
+            partes.append("NC " + ", ".join(f"{c} {NCService.obter_descricao(c)}" for c in ncs)
+                          + (f" — ações: {acoes}" if acoes else " — sem ação corretiva"))
         self.lbl_detalhe.configure(text="  ·  ".join(partes), text_color=theme.TEXT)
 
     # ------------------------------------------------------------------ #
@@ -428,8 +457,8 @@ class HistoricoTab:
         producao = self._producao_selecionada()
         if not producao:
             return
-        vinculos = producao.get("pedidos_vinculados", [])
-        pedidos_vinculados = [p for p in PedidoService.obter_todos() if p.get("id") in vinculos]
+        vinculos = {str(v) for v in ProducaoService.ids_pedidos_vinculados(producao)}
+        pedidos_vinculados = [p for p in PedidoService.obter_todos() if str(p.get("id")) in vinculos]
         id_para_nome = MaquinaService.obter_lookup_id_nome()
 
         pasta_saida = filedialog.askdirectory(title="Escolher pasta para guardar o PDF")
