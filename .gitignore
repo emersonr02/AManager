@@ -19,3 +19,4 @@ data/backups/
 
 # PNGs gerados por tools/capturar_telas.py (revisão visual da UI).
 capturas/
+/data
