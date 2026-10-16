@@ -20,3 +20,7 @@ data/backups/
 # PNGs gerados por tools/capturar_telas.py (revisão visual da UI).
 capturas/
 /data
+
+# Executável gerado pelo AManager.spec (PyInstaller)
+build/
+dist/

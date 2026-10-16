@@ -51,6 +51,23 @@ Running the test suite:
 pytest
 ```
 
+## 📦 Executable for the Network Share
+
+`AManager.spec` builds a single `AManager.exe` (no console, ~45 MB) with PyInstaller:
+
+```bash
+pip install pyinstaller
+python -m PyInstaller AManager.spec --noconfirm
+```
+
+* The result is `dist/AManager.exe`. Build from a clean `main`: the window title shows the build date and commit (`v2026.10.16 (0bdf8d0)`); `+local` means there were uncommitted changes.
+* If `logo_ceiia.ico` is in the repository root, it becomes the `.exe` icon.
+* The `.exe` uses the `data/` folder **next to it** as its database. On the share it goes into the folder that already has `data/`. Never copy the repository's `data/` there.
+* Colleagues should use a shortcut to the `.exe` on the share, never a copy. A copy elsewhere would start a separate, empty database, so the `.exe` warns and asks before opening when there are no orders or requests next to it.
+* `AManager.exe --verificar` opens every screen and builds a PDF and the CSV export in a temp folder, using the data next to it. It ends with "Tudo bem" or the number of problems found. Run it on the share after each update.
+* Errors are logged locally in `%LOCALAPPDATA%\AManager\erros.log`, since the `.exe` has no console.
+* Updating: everyone closes the app, the new `AManager.exe` replaces the old one (keep the old one renamed, e.g. `AManager_anterior.exe`), then run `--verificar`. A running `.exe` cannot be overwritten, which also stops an update while someone still has the app open.
+
 ## 📸 Screen Captures for Visual Review
 
 `tools/capturar_telas.py` saves a PNG of every screen and dialog, to compare the UI before and after a layout change:

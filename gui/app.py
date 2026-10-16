@@ -4,6 +4,7 @@ import threading
 from datetime import datetime
 import customtkinter as ctk
 from config.paths import BASE_DIR, DATA_DIR
+from config.versao import obter_versao
 from gui import theme
 from services.backup_service import BackupService
 
@@ -29,7 +30,10 @@ _NAVEGACAO = [
 class AppIndustrialI3D(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Gestão de Produção i3D | CEiiA")
+        # No executável, a versão (data e commit do build) aparece no título:
+        # mostra logo se todos os PCs estão a usar o mesmo .exe.
+        versao = obter_versao()
+        self.title("Gestão de Produção i3D | CEiiA" + (f"  ·  v{versao}" if versao else ""))
         # Nunca maior do que o ecrã (já descontando a escala do Windows): num
         # portátil 1366x768 a 125%, 1300x800 ocupava 1625x1000 px físicos.
         largura, altura = theme.dimensionar_janela(self, 1300, 800, fracao_altura=0.88)
