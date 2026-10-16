@@ -283,3 +283,84 @@ def test_recusar_proposta_mantem_estado_do_pedido(gui_arquivos, ctk_root, monkey
     tab.salvar_estado_final_ordem(producao)
 
     assert PedidoService.obter_por_id(pedido["id"])["estado"] == "Em Andamento"
+
+
+# ---------- Crédito no pedido por unidades aprovadas (idempotente) ----------
+
+def _ordem_com_pecas(gui_arquivos, pedido, qtd):
+    producao = _criar_producao(gui_arquivos, pedidos_vinculados=[pedido["id"]], campos_extra={"pecas_producao": [
+        {"pedido_id": pedido["id"], "indice": 0, "pn": "P1", "material": "PLA", "qtd": qtd}]})
+    PedidoService.vincular_producao([pedido["id"]], producao["id"])
+    return producao
+
+
+def _fechar(producao, pedido, aprovadas, rejeitadas, estado="Concluída"):
+    producao["estado"] = estado
+    producao["qa_por_peca"] = {f"{pedido['id']}:P1:0": {
+        "qtd_planeada": aprovadas + rejeitadas, "qtd_aprovada": aprovadas, "qtd_rejeitada": rejeitadas,
+        "nc_codigo": "COD003" if rejeitadas else "", "inspecao_visual": True, "controlo_dimensional": True,
+        "conformidade": rejeitadas == 0}}
+    return producao
+
+
+def test_so_as_unidades_aprovadas_contam_no_pedido(gui_arquivos, ctk_root, monkeypatch):
+    monkeypatch.setattr("gui.historico_tab.messagebox.askyesno", lambda t, m: False)
+    pedido = _criar_pedido(gui_arquivos, pecas=[{"pn": "P1", "material": "PLA", "qtd_solicitada": 10, "qtd_produzida": 0}])
+    producao = _ordem_com_pecas(gui_arquivos, pedido, 6)
+    tab = HistoricoTab(ctk_root, None, None, None)
+
+    tab.salvar_estado_final_ordem(_fechar(producao, pedido, aprovadas=5, rejeitadas=1))
+
+    assert PedidoService.obter_por_id(pedido["id"])["pecas"][0]["qtd_produzida"] == 5
+
+
+def test_reabrir_e_guardar_nao_conta_duas_vezes(gui_arquivos, ctk_root, monkeypatch):
+    monkeypatch.setattr("gui.historico_tab.messagebox.askyesno", lambda t, m: False)
+    pedido = _criar_pedido(gui_arquivos, pecas=[{"pn": "P1", "material": "PLA", "qtd_solicitada": 10, "qtd_produzida": 0}])
+    producao = _ordem_com_pecas(gui_arquivos, pedido, 6)
+    tab = HistoricoTab(ctk_root, None, None, None)
+
+    tab.salvar_estado_final_ordem(_fechar(producao, pedido, aprovadas=6, rejeitadas=0))
+    reaberta = ProducaoService.obter_por_id(producao["id"])
+    tab.salvar_estado_final_ordem(_fechar(reaberta, pedido, aprovadas=6, rejeitadas=0))
+    assert PedidoService.obter_por_id(pedido["id"])["pecas"][0]["qtd_produzida"] == 6
+
+    # corrigir para menos desconta a diferença
+    reaberta = ProducaoService.obter_por_id(producao["id"])
+    tab.salvar_estado_final_ordem(_fechar(reaberta, pedido, aprovadas=4, rejeitadas=2))
+    assert PedidoService.obter_por_id(pedido["id"])["pecas"][0]["qtd_produzida"] == 4
+
+
+def test_ordem_cancelada_nao_credita_pecas(gui_arquivos, ctk_root, monkeypatch):
+    monkeypatch.setattr("gui.historico_tab.messagebox.askyesno", lambda t, m: False)
+    pedido = _criar_pedido(gui_arquivos, pecas=[{"pn": "P1", "material": "PLA", "qtd_solicitada": 10, "qtd_produzida": 0}])
+    producao = _ordem_com_pecas(gui_arquivos, pedido, 6)
+    tab = HistoricoTab(ctk_root, None, None, None)
+
+    tab.salvar_estado_final_ordem(_fechar(producao, pedido, aprovadas=6, rejeitadas=0, estado="Cancelada"))
+
+    assert PedidoService.obter_por_id(pedido["id"])["pecas"][0]["qtd_produzida"] == 0
+
+
+# ---------- Retrocompatibilidade: ordens fechadas por versões anteriores ----------
+
+def test_reabrir_ordem_antiga_ja_concluida_nao_volta_a_contar(gui_arquivos, ctk_root, monkeypatch):
+    """Ordem fechada por uma versão anterior (QA só conforme/não conforme, sem
+    `pecas_creditadas`): o pedido já reflete esse fecho, por isso guardá-la de
+    novo sem alterações não pode somar outra vez."""
+    monkeypatch.setattr("gui.historico_tab.messagebox.askyesno", lambda t, m: False)
+    pedido = _criar_pedido(gui_arquivos, pecas=[{"pn": "P1", "material": "PLA", "qtd_solicitada": 10, "qtd_produzida": 6}])
+    chave = f"{pedido['id']}:P1:0"
+    antiga = _criar_producao(gui_arquivos, pedidos_vinculados=[pedido["id"]])
+    antiga.update({"estado": "Concluída", "qa_por_peca": {chave: {"conformidade": True}}})
+    ProducaoService.atualizar_producao(antiga)
+    tab = HistoricoTab(ctk_root, None, None, None)
+
+    # O diálogo novo mostra planeado 4 (o que faltava) e grava as quantidades
+    reaberta = ProducaoService.obter_por_id(antiga["id"])
+    reaberta["qa_por_peca"] = {chave: {"qtd_planeada": 4, "qtd_aprovada": 4, "qtd_rejeitada": 0, "nc_codigo": "",
+                                       "inspecao_visual": True, "controlo_dimensional": True, "conformidade": True}}
+    tab.salvar_estado_final_ordem(reaberta)
+
+    assert PedidoService.obter_por_id(pedido["id"])["pecas"][0]["qtd_produzida"] == 6
+    assert ProducaoService.obter_por_id(antiga["id"])["pecas_creditadas"] == {chave: 4}

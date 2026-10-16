@@ -122,6 +122,159 @@ class ProducaoService:
         producoes.sort(key=lambda x: int(x.get("id", 0)), reverse=True)
         return producoes
 
+    # ── Peças de uma ordem ────────────────────────────────────────────────
+    # Uma ordem leva PEÇAS e QUANTIDADES escolhidas (pecas_producao), não
+    # pedidos inteiros: [{pedido_id, indice, pn, material, qtd}], em que
+    # `indice` é a posição da peça na lista do pedido. pedidos_vinculados
+    # continua a existir, derivado destas peças, para o resto da app.
+
+    @staticmethod
+    def chave_peca(pedido_id, pn, indice) -> str:
+        """Chave de uma peça de pedido — a mesma usada em qa_por_peca. O índice
+        entra porque um pedido pode ter PNs repetidos."""
+        return f"{pedido_id}:{pn}:{indice}"
+
+    @staticmethod
+    def ids_pedidos_vinculados(producao: dict) -> list:
+        """IDs (int) dos pedidos de uma ordem. Registos antigos podem ter os IDs
+        gravados como texto ("12"), ou um valor solto em vez de uma lista."""
+        vinculos = producao.get("pedidos_vinculados") or []
+        if not isinstance(vinculos, (list, tuple, set)):
+            vinculos = [vinculos]
+        ids = []
+        for v in vinculos:
+            try:
+                v = int(v)
+            except (TypeError, ValueError):
+                continue
+            if v not in ids:
+                ids.append(v)
+        return ids
+
+    @staticmethod
+    def pecas_da_producao(producao: dict, pedidos: list = None) -> list:
+        """Peças planeadas numa ordem: [{pedido_id, indice, pn, material, qtd, chave}].
+
+        Ordens antigas (sem pecas_producao) cobriam pedidos inteiros: devolve as
+        peças desses pedidos, com a quantidade que ainda faltava produzir. O
+        fecho da ordem grava estas peças em pecas_producao, para a ordem deixar
+        de depender do estado atual do pedido."""
+        planeadas = [p for p in (producao.get("pecas_producao") or []) if isinstance(p, dict)]
+        if planeadas:
+            return [dict(p, chave=ProducaoService.chave_peca(p.get("pedido_id"), p.get("pn", ""), p.get("indice")))
+                    for p in planeadas]
+        vinculos = ProducaoService.ids_pedidos_vinculados(producao)
+        if not vinculos:
+            return []
+        if pedidos is None:
+            from services.pedido_service import PedidoService
+            pedidos = PedidoService.obter_todos()
+        resultado = []
+        for p in pedidos:
+            try:
+                pid = int(p.get("id"))
+            except (TypeError, ValueError):
+                continue
+            if pid not in vinculos:
+                continue
+            for idx, peca in enumerate(p.get("pecas") or []):
+                if not isinstance(peca, dict):
+                    continue
+                try:
+                    pedida = int(peca.get("qtd_solicitada", 0) or 0)
+                    feita = int(peca.get("qtd_produzida", 0) or 0)
+                except (TypeError, ValueError):
+                    pedida, feita = 0, 0
+                resultado.append({
+                    "pedido_id": pid, "indice": idx, "pn": peca.get("pn", ""),
+                    "material": peca.get("material", ""), "qtd": max(pedida - feita, 0) or pedida,
+                    "chave": ProducaoService.chave_peca(pid, peca.get("pn", ""), idx),
+                })
+        return resultado
+
+    @staticmethod
+    def unidades_aprovadas(producao: dict, pedidos: list = None) -> dict:
+        """{chave da peça: unidades aprovadas} de uma ordem Concluída.
+
+        Fechos de versões anteriores não têm quantidades por peça: uma peça
+        marcada como não conforme conta 0 e as restantes (conformes, ou sem
+        registo de QA) contam a quantidade planeada — o mesmo que o diálogo de
+        fecho propõe ao reabrir uma dessas ordens."""
+        if producao.get("estado") != "Concluída":
+            return {}
+        registos = producao.get("qa_por_peca") or {}
+        if not isinstance(registos, dict):
+            registos = {}
+        resultado = {}
+        for peca in ProducaoService.pecas_da_producao(producao, pedidos):
+            qa = registos.get(peca["chave"])
+            qa = qa if isinstance(qa, dict) else {}
+            if "qtd_aprovada" in qa:
+                qtd = qa.get("qtd_aprovada")
+            elif qa.get("conformidade") is False:
+                qtd = 0
+            else:
+                qtd = peca.get("qtd")
+            try:
+                qtd = int(qtd or 0)
+            except (TypeError, ValueError):
+                qtd = 0
+            if qtd > 0:
+                resultado[peca["chave"]] = qtd
+        return resultado
+
+    @staticmethod
+    def unidades_ja_creditadas(producao: dict) -> dict:
+        """O que esta ordem (tal como está gravada) já somou aos pedidos.
+
+        Ordens fechadas antes de existir `pecas_creditadas` não guardaram esse
+        registo: assume-se que esse fecho já foi contado no pedido (pela versão
+        anterior ou à mão), para reabrir uma ordem antiga não contar as peças
+        duas vezes."""
+        if "pecas_creditadas" not in producao:
+            return ProducaoService.unidades_aprovadas(producao)
+        resultado = {}
+        for chave, qtd in (producao.get("pecas_creditadas") or {}).items():
+            try:
+                resultado[chave] = int(qtd or 0)
+            except (TypeError, ValueError):
+                continue
+        return resultado
+
+    @staticmethod
+    def ncs_da_producao(producao: dict) -> list:
+        """Códigos NC de uma ordem, sem repetidos: o da ordem (falha da impressão
+        inteira) e os de cada peça (ex: só uma peça empenou)."""
+        codigos = []
+        if producao.get("nc_codigo"):
+            codigos.append(producao["nc_codigo"])
+        for qa in (producao.get("qa_por_peca") or {}).values():
+            cod = qa.get("nc_codigo") if isinstance(qa, dict) else None
+            if cod and cod not in codigos:
+                codigos.append(cod)
+        return codigos
+
+    @staticmethod
+    def qtd_em_producao_por_peca() -> dict:
+        """{(pedido_id, indice): unidades já planeadas em ordens ainda abertas} —
+        para a seleção de peças mostrar quanto falta realmente lançar."""
+        resultado = {}
+        pedidos = None
+        for p in ProducaoService.obter_todos():
+            if p.get("estado") not in ("Em Andamento", "A Imprimir"):
+                continue
+            if not p.get("pecas_producao") and pedidos is None:
+                # Ordens abertas de versões anteriores cobrem o que faltava dos pedidos
+                from services.pedido_service import PedidoService
+                pedidos = PedidoService.obter_todos()
+            for peca in ProducaoService.pecas_da_producao(p, pedidos):
+                try:
+                    chave = (int(peca.get("pedido_id")), int(peca.get("indice")))
+                    resultado[chave] = resultado.get(chave, 0) + int(peca.get("qtd", 0) or 0)
+                except (TypeError, ValueError):
+                    continue
+        return resultado
+
     @staticmethod
     def anular_producao(id_producao, motivo: str, utilizador: str = None) -> bool:
         """Anula uma ordem em vez de a apagar: o registo de qualidade fica no
@@ -219,7 +372,9 @@ class ProducaoService:
             novo["erro"] = ""
             # Limpa todos os dados de fecho do original — o clone começa do zero
             for campo in ("tempo_real", "quantidade_real", "verificado_por",
-                          "data_fecho", "nc_codigo", "controlo_qualidade"):
+                          "data_fecho", "nc_codigo", "controlo_qualidade", "qa_por_peca",
+                          "acoes_aplicadas", "notas_acao_corretiva", "anulada", "anulada_por",
+                          "anulada_em", "motivo_anulacao", "pecas_creditadas"):
                 novo.pop(campo, None)
 
             producoes.append(novo)

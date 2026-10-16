@@ -115,22 +115,33 @@ class PedidoService:
         return (datetime.strptime(data, "%Y-%m-%d").date() - hoje).days
 
     @staticmethod
-    def registar_pecas_produzidas(chaves_conformes: list) -> list:
-        """Fecho do ciclo ordem → pedido: cada chave "id_pedido:pn:índice" (as
-        mesmas do controlo de qualidade por peça no fecho da ordem) marca essa
-        linha de peça como totalmente produzida.
+    def registar_pecas_produzidas(aprovadas) -> list:
+        """Fecho do ciclo ordem → pedido. `aprovadas` é {chave: unidades aprovadas},
+        com as chaves "id_pedido:pn:índice" do controlo de qualidade por peça:
+        cada peça do pedido avança essas unidades (nunca além do pedido). Valores
+        negativos descontam (correção de um fecho anterior), nunca abaixo de 0.
+
+        Também aceita uma lista de chaves (ordens antigas, sem quantidades por
+        peça): nesse caso a peça fica toda produzida.
 
         Devolve os pedidos alterados (já com `qtd_produzida` atualizada), para a
         UI propor o estado sugerido a cada um."""
+        if isinstance(aprovadas, (list, tuple, set)):
+            aprovadas = {chave: None for chave in aprovadas}
         por_pedido = {}
-        for chave in chaves_conformes:
+        for chave, qtd in aprovadas.items():
             partes = str(chave).split(":")
             if len(partes) < 3:
                 continue
             try:
-                por_pedido.setdefault(int(partes[0]), set()).add(int(partes[-1]))
-            except ValueError:
+                pid, idx = int(partes[0]), int(partes[-1])
+                qtd = None if qtd is None else int(qtd)
+            except (TypeError, ValueError):
                 continue
+            if qtd == 0:
+                continue
+            atual = por_pedido.setdefault(pid, {})
+            atual[idx] = None if (qtd is None or atual.get(idx, 0) is None) else atual.get(idx, 0) + qtd
         if not por_pedido:
             return []
 
@@ -145,9 +156,14 @@ class PedidoService:
                 mudou = False
                 for idx, peca in enumerate(p.get("pecas", [])):
                     if idx in indices:
-                        pedida = int(peca.get("qtd_solicitada", 0) or 0)
-                        if int(peca.get("qtd_produzida", 0) or 0) < pedida:
-                            peca["qtd_produzida"] = pedida
+                        try:
+                            pedida = int(peca.get("qtd_solicitada", 0) or 0)
+                            produzida = int(peca.get("qtd_produzida", 0) or 0)
+                        except (TypeError, ValueError):
+                            continue
+                        nova = pedida if indices[idx] is None else max(0, min(pedida, produzida + indices[idx]))
+                        if nova != produzida:
+                            peca["qtd_produzida"] = nova
                             mudou = True
                 if mudou:
                     p["data_atualizacao"] = hoje

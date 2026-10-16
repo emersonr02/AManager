@@ -233,3 +233,20 @@ def test_registar_pecas_produzidas_e_idempotente(arquivo_pedidos):
     PedidoService.registar_pecas_produzidas([f"{p['id']}:P0:0"])
 
     assert PedidoService.registar_pecas_produzidas([f"{p['id']}:P0:0"]) == []
+
+
+
+def test_registar_pecas_produzidas_por_quantidade_soma_e_limita(arquivo_pedidos):
+    p = _criar(arquivo_pedidos, pecas=_pecas((10, 2), (4, 0)))
+
+    PedidoService.registar_pecas_produzidas({f"{p['id']}:P0:0": 5, f"{p['id']}:P1:1": 9})
+
+    assert [pc["qtd_produzida"] for pc in PedidoService.obter_por_id(p["id"])["pecas"]] == [7, 4]
+
+
+def test_registar_pecas_produzidas_negativo_desconta_sem_passar_de_zero(arquivo_pedidos):
+    p = _criar(arquivo_pedidos, pecas=_pecas((10, 3)))
+
+    PedidoService.registar_pecas_produzidas({f"{p['id']}:P0:0": -5})
+
+    assert PedidoService.obter_por_id(p["id"])["pecas"][0]["qtd_produzida"] == 0

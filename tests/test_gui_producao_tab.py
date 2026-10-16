@@ -30,6 +30,12 @@ def _criar_pedido(gui_arquivos, tecnologia="FDM", pecas=None):
     )
 
 
+def _pecas_de(pedido, qtd=None):
+    """Todas as peças de um pedido, no formato de pecas_producao."""
+    return [{"pedido_id": pedido["id"], "indice": i, "pn": p["pn"], "material": p["material"],
+             "qtd": qtd or p["qtd_solicitada"]} for i, p in enumerate(pedido["pecas"])]
+
+
 def _tab_fdm_pronta(gui_arquivos, ctk_root, avisos):
     """Cria uma ProducaoTab em FDM com máquina, pedido vinculado e tempo válidos —
     faltando só os campos específicos de segurança, consoante o teste."""
@@ -37,7 +43,7 @@ def _tab_fdm_pronta(gui_arquivos, ctk_root, avisos):
     pedido = _criar_pedido(gui_arquivos)
 
     tab = ProducaoTab(ctk_root, None, None)
-    tab.pedidos_vinculados = [pedido["id"]]
+    tab._definir_pecas(_pecas_de(pedido))
     tab.ent_tempo.insert(0, "02:00")
     return tab, pedido
 
@@ -74,7 +80,7 @@ def test_gravar_sem_tempo_valido_bloqueia(gui_arquivos, ctk_root, avisos):
     _criar_maquina(gui_arquivos)
     pedido = _criar_pedido(gui_arquivos)
     tab = ProducaoTab(ctk_root, None, None)
-    tab.pedidos_vinculados = [pedido["id"]]
+    tab._definir_pecas(_pecas_de(pedido))
 
     tab.gravar_producao()
 
@@ -86,7 +92,7 @@ def test_gravar_sem_maquina_valida_bloqueia(gui_arquivos, ctk_root, avisos):
     # Nenhuma máquina FDM cadastrada -> combobox fica em "Sem máquinas p/ FDM"
     pedido = _criar_pedido(gui_arquivos)
     tab = ProducaoTab(ctk_root, None, None)
-    tab.pedidos_vinculados = [pedido["id"]]
+    tab._definir_pecas(_pecas_de(pedido))
     tab.ent_tempo.insert(0, "02:00")
 
     tab.gravar_producao()
@@ -157,7 +163,7 @@ def test_sls_bloqueia_sem_lote_po(gui_arquivos, ctk_root, avisos):
     pedido = _criar_pedido(gui_arquivos, tecnologia="SLS")
     tab = ProducaoTab(ctk_root, None, None)
     tab.ao_mudar_tecnologia("SLS")
-    tab.pedidos_vinculados = [pedido["id"]]
+    tab._definir_pecas(_pecas_de(pedido))
     tab.ent_tempo.insert(0, "02:00")
     tab.ent_altura.insert(0, "470")
     tab.ent_perc.insert(0, "0.3")
@@ -176,7 +182,7 @@ def test_sls_grava_producao_completa(gui_arquivos, ctk_root, avisos):
     pedido = _criar_pedido(gui_arquivos, tecnologia="SLS")
     tab = ProducaoTab(ctk_root, None, None)
     tab.ao_mudar_tecnologia("SLS")
-    tab.pedidos_vinculados = [pedido["id"]]
+    tab._definir_pecas(_pecas_de(pedido))
     tab.ent_tempo.insert(0, "02:00")
     tab.ent_altura.insert(0, "470")
     tab.ent_perc.insert(0, "0.3")
@@ -213,7 +219,7 @@ def test_ao_mudar_tecnologia_reseta_pedidos_vinculados(gui_arquivos, ctk_root):
     _criar_maquina(gui_arquivos)
     pedido = _criar_pedido(gui_arquivos)
     tab = ProducaoTab(ctk_root, None, None)
-    tab.pedidos_vinculados = [pedido["id"]]
+    tab._definir_pecas(_pecas_de(pedido))
 
     tab.ao_mudar_tecnologia("SLA")
 
@@ -229,7 +235,7 @@ def _abrir_popup_selecao(tab):
 def _checks_por_pn(tab):
     """Mapeia cada pedido do popup pelo seu PN (via o texto do checkbox), já que
     dict_checks_pedidos não guarda o PN diretamente."""
-    return {item["id"]: item for item in tab.dict_checks_pedidos}
+    return {item["pedido_id"]: item for item in tab.dict_checks_pecas}
 
 
 def test_popup_selecao_bloqueia_pedidos_com_material_incompativel(gui_arquivos, ctk_root, avisos):
@@ -308,6 +314,7 @@ def test_confirmar_selecao_atualiza_pedidos_vinculados_e_texto(gui_arquivos, ctk
     top.btn_acao.cget("command")()
 
     assert tab.pedidos_vinculados == [pedido["id"]]
+    assert tab.pecas_producao == [{"pedido_id": pedido["id"], "indice": 0, "pn": "A", "material": "PLA", "qtd": 1}]
     assert PedidoService.formatar_codigo(pedido["id"]) in tab.ent_pedidos_sel.get()
     assert top.winfo_exists() == 0
 
@@ -343,7 +350,7 @@ def test_rodape_lista_o_que_falta_e_desativa_o_botao(gui_arquivos, ctk_root):
     tab = ProducaoTab(ctk_root, None, None)
 
     falta = tab.lbl_falta.cget("text")
-    for trecho in ("pedidos", "tempo", "quantidade", "checklist (0/3)"):
+    for trecho in ("peças", "tempo", "material estimado", "checklist (0/3)"):
         assert trecho in falta
     assert tab.btn_salvar.cget("state") == "disabled"
 
@@ -371,7 +378,7 @@ def test_resumo_mostra_pedidos_selecionados(gui_arquivos, ctk_root):
     pedido = _criar_pedido(gui_arquivos)
     tab = ProducaoTab(ctk_root, None, None)
 
-    tab._definir_pedidos([pedido["id"]])
+    tab._definir_pecas(_pecas_de(pedido))
 
     textos = [w.cget("text") for bloco in tab.frm_resumo.winfo_children() for w in bloco.winfo_children()
               if type(w).__name__ == "CTkLabel"]
@@ -386,3 +393,98 @@ def test_preselecionar_escolhe_tecnologia_e_maquina(gui_arquivos, ctk_root):
 
     assert tab.cmb_tech.get() == "SLS"
     assert tab.cmb_maq.get() == "SLS 1"
+
+
+# ---------- Peças e quantidades por ordem (não pedidos inteiros) ----------
+
+def _pedido_duas_pecas(gui_arquivos, material="PLA"):
+    return _criar_pedido(gui_arquivos, pecas=[
+        {"pn": "BASE", "material": material, "qtd_solicitada": 10, "qtd_produzida": 0},
+        {"pn": "TAMPA", "material": material, "qtd_solicitada": 4, "qtd_produzida": 0},
+    ])
+
+
+def test_ordem_grava_so_as_pecas_e_quantidades_escolhidas(gui_arquivos, ctk_root, avisos):
+    _criar_maquina(gui_arquivos)
+    pedido = _pedido_duas_pecas(gui_arquivos)
+    tab = ProducaoTab(ctk_root, None, None)
+    tab._definir_pecas([{"pedido_id": pedido["id"], "indice": 0, "pn": "BASE", "material": "PLA", "qtd": 6}])
+    tab.ent_tempo.insert(0, "02:00")
+    tab.ent_quant.insert(0, "100")
+    for var in tab.fdm_vars.values():
+        var.set(True)
+
+    tab.gravar_producao()
+
+    ordem = ProducaoService.obter_todos()[0]
+    assert ordem["pecas_producao"] == [{"pedido_id": pedido["id"], "indice": 0, "pn": "BASE", "material": "PLA", "qtd": 6}]
+    assert ordem["pedidos_vinculados"] == [pedido["id"]]
+
+
+def test_selecao_mostra_quanto_falta_descontando_outras_ordens(gui_arquivos, ctk_root, avisos):
+    _criar_maquina(gui_arquivos)
+    pedido = _pedido_duas_pecas(gui_arquivos)
+    ProducaoService.criar_producao(tecnologia="FDM", maquina="Printer FDM 1", tempo_estimado="01:00",
+                                   pedidos_vinculados=[pedido["id"]], operador="t",
+                                   campos_extra={"pecas_producao": [{"pedido_id": pedido["id"], "indice": 0,
+                                                                     "pn": "BASE", "material": "PLA", "qtd": 7}]})
+    tab = ProducaoTab(ctk_root, None, None)
+
+    tab.abrir_selecao_pecas()
+
+    base, tampa = tab.dict_checks_pecas
+    assert base["falta"] == 3 and base["ent_qtd"].get() == "3"     # 10 pedidas − 7 noutra ordem
+    assert tampa["falta"] == 4 and tampa["ent_qtd"].get() == "4"
+    tab.dialogo_selecao.destroy()
+
+
+def test_selecao_confirma_quantidade_editada_e_so_pecas_marcadas(gui_arquivos, ctk_root, avisos):
+    _criar_maquina(gui_arquivos)
+    pedido = _pedido_duas_pecas(gui_arquivos)
+    tab = ProducaoTab(ctk_root, None, None)
+    tab.abrir_selecao_pecas()
+    base, _tampa = tab.dict_checks_pecas
+
+    base["var"].set(True)
+    base["ent_qtd"].delete(0, "end")
+    base["ent_qtd"].insert(0, "5")
+    tab.dialogo_selecao.confirmar()
+
+    assert tab.pecas_producao == [{"pedido_id": pedido["id"], "indice": 0, "pn": "BASE", "material": "PLA", "qtd": 5}]
+    assert "1 peça(s), 5 un." in tab.ent_pedidos_sel.get()
+
+
+def test_selecao_rejeita_quantidade_invalida(gui_arquivos, ctk_root, monkeypatch):
+    avisos = []
+    monkeypatch.setattr("gui.producao_tab.messagebox.showwarning", lambda t, m: avisos.append(m))
+    _criar_maquina(gui_arquivos)
+    _pedido_duas_pecas(gui_arquivos)
+    tab = ProducaoTab(ctk_root, None, None)
+    tab.abrir_selecao_pecas()
+    base = tab.dict_checks_pecas[0]
+    base["var"].set(True)
+    base["ent_qtd"].delete(0, "end")
+    base["ent_qtd"].insert(0, "0")
+
+    tab.dialogo_selecao.confirmar()
+
+    assert avisos and tab.pecas_producao == []
+    assert tab.dialogo_selecao.winfo_exists() == 1
+    tab.dialogo_selecao.destroy()
+
+
+def test_selecao_bloqueia_peca_de_outro_material_no_mesmo_pedido(gui_arquivos, ctk_root, avisos):
+    _criar_maquina(gui_arquivos)
+    _criar_pedido(gui_arquivos, pecas=[
+        {"pn": "A", "material": "PLA", "qtd_solicitada": 1, "qtd_produzida": 0},
+        {"pn": "B", "material": "PETG", "qtd_solicitada": 1, "qtd_produzida": 0},
+    ])
+    tab = ProducaoTab(ctk_root, None, None)
+    tab.abrir_selecao_pecas()
+    a, b = tab.dict_checks_pecas
+
+    a["var"].set(True)
+    a["widget"].cget("command")()
+
+    assert b["widget"].cget("state") == "disabled"
+    tab.dialogo_selecao.destroy()

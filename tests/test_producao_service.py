@@ -209,3 +209,108 @@ def test_anular_producao_esconde_da_lista_mas_mantem_no_ficheiro(arquivo_produco
 
 def test_anular_producao_inexistente_devolve_false(arquivo_producoes):
     assert ProducaoService.anular_producao(999, "x") is False
+
+
+# ---------- Peças de uma ordem ----------
+
+def test_pecas_da_producao_usa_pecas_escolhidas():
+    producao = {"pecas_producao": [{"pedido_id": 3, "indice": 1, "pn": "B", "material": "PLA", "qtd": 5}]}
+    pecas = ProducaoService.pecas_da_producao(producao, pedidos=[])
+    assert pecas == [{"pedido_id": 3, "indice": 1, "pn": "B", "material": "PLA", "qtd": 5, "chave": "3:B:1"}]
+
+
+def test_pecas_da_producao_legacy_usa_o_que_faltava_do_pedido():
+    pedidos = [{"id": 3, "pecas": [{"pn": "A", "material": "PLA", "qtd_solicitada": 10, "qtd_produzida": 4},
+                                   {"pn": "B", "material": "PLA", "qtd_solicitada": 2, "qtd_produzida": 2}]}]
+    pecas = ProducaoService.pecas_da_producao({"pedidos_vinculados": [3]}, pedidos)
+    assert [(p["pn"], p["qtd"]) for p in pecas] == [("A", 6), ("B", 2)]
+
+
+def test_ncs_da_producao_junta_ordem_e_pecas_sem_repetir():
+    producao = {"nc_codigo": "COD001", "qa_por_peca": {
+        "1:A:0": {"nc_codigo": "COD003"}, "1:B:1": {"nc_codigo": "COD001"}, "1:C:2": {"nc_codigo": ""}}}
+    assert ProducaoService.ncs_da_producao(producao) == ["COD001", "COD003"]
+
+
+def test_qtd_em_producao_por_peca_so_conta_ordens_abertas(arquivo_producoes):
+    for estado in ("Em Andamento", "Concluída"):
+        p = ProducaoService.criar_producao(tecnologia="FDM", maquina="X1", tempo_estimado="01:00", pedidos_vinculados=[1],
+                                           operador="t", campos_extra={"pecas_producao": [
+                                               {"pedido_id": 1, "indice": 0, "pn": "A", "material": "PLA", "qtd": 3}]})
+        p["estado"] = estado
+        ProducaoService.atualizar_producao(p)
+
+    assert ProducaoService.qtd_em_producao_por_peca() == {(1, 0): 3}
+
+
+# ---------- Retrocompatibilidade: registos de versões anteriores ----------
+
+@pytest.mark.parametrize("vinculos, esperado", [
+    ([3, "4", "x", None, 3], [3, 4]),   # IDs como texto, lixo e repetidos
+    ("7", [7]),                          # valor solto em vez de lista
+    (None, []),
+    ([], []),
+])
+def test_ids_pedidos_vinculados_normaliza_registos_antigos(vinculos, esperado):
+    assert ProducaoService.ids_pedidos_vinculados({"pedidos_vinculados": vinculos}) == esperado
+
+
+def test_pecas_da_producao_legacy_aceita_ids_como_texto():
+    pedidos = [{"id": 3, "pecas": [{"pn": "A", "material": "PLA", "qtd_solicitada": 2, "qtd_produzida": 0}]}]
+    pecas = ProducaoService.pecas_da_producao({"pedidos_vinculados": ["3"]}, pedidos)
+    assert [(p["pedido_id"], p["chave"]) for p in pecas] == [(3, "3:A:0")]
+
+
+def test_pecas_da_producao_sem_pedidos_nao_le_o_ficheiro_de_pedidos(monkeypatch):
+    # Ordens muito antigas (projeto/material direto na ordem) não têm pedidos
+    from services.pedido_service import PedidoService
+    monkeypatch.setattr(PedidoService, "obter_todos", lambda: pytest.fail("não devia ler pedidos"))
+    assert ProducaoService.pecas_da_producao({"nr_projeto": "123", "material": "PLA"}) == []
+
+
+def test_unidades_aprovadas_le_fechos_antigos_e_novos():
+    pedidos = [{"id": 1, "pecas": [{"pn": "A", "material": "PLA", "qtd_solicitada": 4, "qtd_produzida": 0},
+                                   {"pn": "B", "material": "PLA", "qtd_solicitada": 3, "qtd_produzida": 0},
+                                   {"pn": "C", "material": "PLA", "qtd_solicitada": 2, "qtd_produzida": 0}]}]
+    antigo = {"estado": "Concluída", "pedidos_vinculados": [1], "qa_por_peca": {
+        "1:A:0": {"conformidade": True}, "1:B:1": {"conformidade": False}}}   # C sem registo de QA
+    assert ProducaoService.unidades_aprovadas(antigo, pedidos) == {"1:A:0": 4, "1:C:2": 2}
+
+    novo = {"estado": "Concluída", "pecas_producao": [{"pedido_id": 1, "indice": 0, "pn": "A", "material": "PLA", "qtd": 4}],
+            "qa_por_peca": {"1:A:0": {"qtd_aprovada": 3, "qtd_rejeitada": 1}}}
+    assert ProducaoService.unidades_aprovadas(novo) == {"1:A:0": 3}
+
+    assert ProducaoService.unidades_aprovadas({**antigo, "estado": "Cancelada"}, pedidos) == {}
+
+
+def test_ordem_fechada_por_versao_anterior_conta_como_ja_creditada(arquivo_pedidos):
+    from services.pedido_service import PedidoService
+    pedido = PedidoService.criar_pedido(requerente_email="a@x.com", nr_projeto="1", nome_projeto="P", tecnologia="FDM",
+                                        data_entrega="2026-09-01", link_arquivos="", observacoes="",
+                                        pecas=[{"pn": "A", "material": "PLA", "qtd_solicitada": 4, "qtd_produzida": 4}])
+    chave = f"{pedido['id']}:A:0"
+    antiga = {"estado": "Concluída", "pedidos_vinculados": [pedido["id"]], "qa_por_peca": {chave: {"conformidade": True}}}
+    assert ProducaoService.unidades_ja_creditadas(antiga) == {chave: 4}
+    assert ProducaoService.unidades_ja_creditadas({**antiga, "pecas_creditadas": {chave: "2"}}) == {chave: 2}
+    assert ProducaoService.unidades_ja_creditadas({**antiga, "estado": "Em Andamento"}) == {}
+
+
+def test_qtd_em_producao_por_peca_conta_ordens_abertas_antigas(arquivo_producoes, arquivo_pedidos):
+    from services.pedido_service import PedidoService
+    pedido = PedidoService.criar_pedido(requerente_email="a@x.com", nr_projeto="1", nome_projeto="P", tecnologia="FDM",
+                                        data_entrega="2026-09-01", link_arquivos="", observacoes="",
+                                        pecas=[{"pn": "A", "material": "PLA", "qtd_solicitada": 10, "qtd_produzida": 4}])
+    # Ordem aberta de uma versão anterior: cobre o pedido inteiro (ID como texto)
+    ProducaoService.criar_producao(tecnologia="FDM", maquina="X1", tempo_estimado="01:00",
+                                   pedidos_vinculados=[str(pedido["id"])], operador="t")
+
+    assert ProducaoService.qtd_em_producao_por_peca() == {(pedido["id"], 0): 6}
+
+
+def test_clonar_nao_herda_o_credito_da_ordem_original(arquivo_producoes):
+    p1 = _criar(arquivo_producoes)
+    ProducaoService.atualizar_producao({**p1, "estado": "Concluída", "pecas_creditadas": {"1:A:0": 3}})
+
+    clone = ProducaoService.clonar_producao(p1["id"])
+
+    assert "pecas_creditadas" not in clone

@@ -132,3 +132,20 @@ def test_formatar_alerta_recorrencia_ordena_por_contagem(arquivos_nc):
     msg = NCService.formatar_alerta_recorrencia({"COD001": 2, "COD002": 5})
     linhas = msg.split("\n")
     assert linhas[0].startswith("COD002"), "O código com mais ocorrências deve vir primeiro"
+
+
+
+def test_recorrencia_conta_ncs_de_pecas(arquivo_producoes, arquivos_nc):
+    # Duas ordens na mesma máquina em que só UMA peça falhou com COD003 (a ordem
+    # em si não tem NC) — continua a ser um problema recorrente.
+    from datetime import datetime
+    from services.producao_service import ProducaoService
+    from services.nc_service import NCService
+    for _ in range(2):
+        p = ProducaoService.criar_producao(tecnologia="FDM", maquina="X1C-9", tempo_estimado="01:00",
+                                           pedidos_vinculados=[], operador="t")
+        p.update({"estado": "Concluída", "data_inicio": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                  "qa_por_peca": {"1:A:0": {"qtd_aprovada": 3, "qtd_rejeitada": 1, "nc_codigo": "COD003"}}})
+        ProducaoService.atualizar_producao(p)
+
+    assert NCService.detectar_recorrencia("X1C-9") == {"COD003": 2}

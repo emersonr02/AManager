@@ -113,8 +113,9 @@ class NCService:
         tem_acao: dict = {}
 
         for p in ProducaoService.obter_todos():
-            nc_cod = p.get("nc_codigo", "")
-            if not nc_cod:
+            # NC da ordem e NCs de peças (uma peça empenada também conta)
+            codigos = ProducaoService.ncs_da_producao(p)
+            if not codigos:
                 continue
             if ProducaoService.normalizar_maquina(p, id_para_nome) != nome_maquina:
                 continue
@@ -130,9 +131,10 @@ class NCService:
             if dt is None or dt < limite:
                 continue
 
-            contagem[nc_cod] = contagem.get(nc_cod, 0) + 1
-            if p.get("acoes_aplicadas"):
-                tem_acao[nc_cod] = True
+            for nc_cod in codigos:
+                contagem[nc_cod] = contagem.get(nc_cod, 0) + 1
+                if p.get("acoes_aplicadas"):
+                    tem_acao[nc_cod] = True
 
         return {
             cod: cnt for cod, cnt in contagem.items()

@@ -20,6 +20,7 @@ CABECALHO_AUDITORIA = [
     "CÓDIGO NC", "DESCRIÇÃO NC", "AÇÕES CORRETIVAS SUGERIDAS",
     "AÇÕES CORRETIVAS APLICADAS", "NOTAS DA CORREÇÃO",
     "ALTURA CUBA (SLS)", "% PÓ NOVO (SLS)", "LOTE PÓ (SLS)",
+    "PEÇAS DA ORDEM (PN x QTD)", "PEÇAS APROVADAS / REJEITADAS", "NC POR PEÇA",
 ]
 
 
@@ -38,7 +39,9 @@ class ExportService:
 
     @staticmethod
     def _pedidos_vinculados(producao: dict, pedidos_por_id: dict) -> list:
-        return [pedidos_por_id[v] for v in producao.get("pedidos_vinculados", [])
+        # IDs normalizados para int: registos antigos podem tê-los como texto
+        from services.producao_service import ProducaoService
+        return [pedidos_por_id[v] for v in ProducaoService.ids_pedidos_vinculados(producao)
                 if v in pedidos_por_id]
 
     @staticmethod
@@ -248,7 +251,25 @@ class ExportService:
             producao.get("altura_cuba", ""),
             producao.get("percentagem_po_novo", ""),
             producao.get("lote_po", ""),
+            *ExportService._colunas_pecas(producao, pedidos_por_id),
         ]
+
+    @staticmethod
+    def _colunas_pecas(producao: dict, pedidos_por_id: dict) -> list:
+        """Peças planeadas na ordem e o resultado do QA por peça (aprovadas,
+        rejeitadas e NC de cada peça)."""
+        from services.producao_service import ProducaoService
+        pecas = ProducaoService.pecas_da_producao(producao, ExportService._pedidos_vinculados(producao, pedidos_por_id))
+        qa = producao.get("qa_por_peca") or {}
+        planeadas, resultados, ncs = [], [], []
+        for p in pecas:
+            planeadas.append(f"{p['pn']} x{p['qtd']}")
+            registo = qa.get(p["chave"]) or {}
+            if "qtd_aprovada" in registo:
+                resultados.append(f"{p['pn']}: {registo.get('qtd_aprovada', 0)}/{registo.get('qtd_rejeitada', 0)}")
+            if registo.get("nc_codigo"):
+                ncs.append(f"{p['pn']}: {registo['nc_codigo']}")
+        return [" | ".join(planeadas), " | ".join(resultados), " | ".join(ncs)]
 
     # ─────────────────────────────────────────────
     # EXPORT PRINCIPAL
@@ -345,8 +366,8 @@ class ExportService:
 
             # NC Pareto — regista também se o loop CAPA foi fechado
             # (pelo menos uma ação corretiva confirmada como aplicada)
-            nc_cod = prod.get("nc_codigo", "")
-            if nc_cod:
+            # (NC da ordem e NC de cada peça, como o Pareto da app)
+            for nc_cod in ProducaoService.ncs_da_producao(prod):
                 acc_nc = nc_pareto.setdefault(nc_cod, {"total": 0, "com_acao": 0})
                 acc_nc["total"] += 1
                 if prod.get("acoes_aplicadas"):

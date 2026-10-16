@@ -85,17 +85,25 @@ class PDFService:
 
         # ── Projeto(s) e requerente(s) ────────────────────────────────────
         if pedidos_vinculados:
-            PDFService._secao_titulo(pdf, "Pedido(s) Associado(s)")
+            from services.producao_service import ProducaoService
+            from services.pedido_service import PedidoService
+            pecas = ProducaoService.pecas_da_producao(producao, pedidos_vinculados)
+            qa = producao.get("qa_por_peca") or {}
+            PDFService._secao_titulo(pdf, "Peças nesta Ordem")
             for p in pedidos_vinculados:
                 proj = f"{p.get('nr_projeto','')} - {p.get('nome_projeto','')}".strip(" -")
                 pdf.set_font("Helvetica", "B", 10)
-                pdf.cell(0, 6, f"- {proj}", ln=1)
+                pdf.cell(0, 6, f"- {PedidoService.formatar_codigo(p.get('id'))}  {proj}", ln=1)
                 pdf.set_font("Helvetica", "", 9)
                 pdf.cell(0, 5, f"   Requerente: {p.get('requerente_email','N/A')}", ln=1)
-                for peca in p.get("pecas", []):
-                    pdf.cell(0, 5,
-                        f"   - {peca.get('pn','')} | {peca.get('material','')} | Qtd: {peca.get('qtd','')}",
-                        ln=1)
+                for peca in (x for x in pecas if str(x["pedido_id"]) == str(p.get("id"))):
+                    linha = f"   - {peca['pn']} | {peca['material']} | Qtd: {peca['qtd']}"
+                    registo = qa.get(peca["chave"]) or {}
+                    if "qtd_aprovada" in registo:
+                        linha += f" | Aprovadas: {registo.get('qtd_aprovada', 0)} | Rejeitadas: {registo.get('qtd_rejeitada', 0)}"
+                        if registo.get("nc_codigo"):
+                            linha += f" ({registo['nc_codigo']})"
+                    pdf.cell(0, 5, linha, ln=1)
                 pdf.ln(2)
         elif producao.get("nr_projeto"):
             PDFService._secao_titulo(pdf, "Projeto")
@@ -123,14 +131,16 @@ class PDFService:
                 pdf.cell(0, 6, f"{marca}  {chave.replace('_', ' ').title()}", ln=1)
 
         # ── Não-conformidade e ações corretivas (loop CAPA) ───────────────
-        nc_cod = producao.get("nc_codigo", "")
-        if nc_cod:
+        from services.producao_service import ProducaoService
+        ncs = ProducaoService.ncs_da_producao(producao)   # da ordem e das peças
+        if ncs:
             from services.nc_service import NCService
             PDFService._secao_titulo(pdf, "Não-Conformidade e Ações Corretivas")
-            pdf.set_font("Helvetica", "B", 9)
-            pdf.cell(50, 6, "Código NC:", border=0)
-            pdf.set_font("Helvetica", "", 9)
-            pdf.cell(0, 6, f"{nc_cod} - {NCService.obter_descricao(nc_cod)}", ln=1)
+            for nc_cod in ncs:
+                pdf.set_font("Helvetica", "B", 9)
+                pdf.cell(50, 6, "Código NC:", border=0)
+                pdf.set_font("Helvetica", "", 9)
+                pdf.cell(0, 6, f"{nc_cod} - {NCService.obter_descricao(nc_cod)}", ln=1)
 
             acoes_aplicadas = producao.get("acoes_aplicadas", [])
             pdf.set_font("Helvetica", "B", 9)
@@ -249,11 +259,11 @@ class PDFService:
             PDFService._secao_titulo(pdf, "Não-Conformidades de Hoje")
             for p in com_nc:
                 codigo = ProducaoService.formatar_codigo(p.get("id"))
-                nc_cod = p.get("nc_codigo", "")
-                desc = NCService.obter_descricao(nc_cod)
+                ncs = ProducaoService.ncs_da_producao(p)
+                texto_ncs = ", ".join(f"{c} ({NCService.obter_descricao(c)})" for c in ncs)
                 fechado = "CAPA fechado" if p.get("acoes_aplicadas") else "SEM ação confirmada"
                 pdf.set_font("Helvetica", "", 9)
-                pdf.cell(0, 6, f"{codigo}  -  {nc_cod} ({desc})  -  {fechado}", ln=1)
+                pdf.cell(0, 6, f"{codigo}  -  {texto_ncs}  -  {fechado}", ln=1)
 
         # Máquinas paradas / em manutenção
         PDFService._secao_titulo(pdf, f"Máquinas Fora de Operação ({len(maquinas_paradas)})")

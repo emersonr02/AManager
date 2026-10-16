@@ -190,7 +190,7 @@ class ParqueTab:
         frm = ctk.CTkFrame(card, fg_color=theme.TEAL_BG, corner_radius=theme.RADIUS_S)
         frm.pack(fill="x", padx=14, pady=(8, 0))
 
-        nomes = sorted({projetos.get(v, "") for v in producao.get("pedidos_vinculados", [])} - {""})
+        nomes = sorted({projetos.get(v, "") for v in ProducaoService.ids_pedidos_vinculados(producao)} - {""})
         projeto = " | ".join(nomes) or producao.get("nr_projeto", "") or "Sem projeto"
         ctk.CTkLabel(frm, text=f"{ProducaoService.formatar_codigo(producao.get('id'))} · {projeto}",
                      font=theme.font_body(12, "bold"), text_color=theme.TEAL, wraplength=220, justify="left",
